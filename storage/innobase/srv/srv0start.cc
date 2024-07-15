@@ -1475,6 +1475,7 @@ innobase_start_or_create_for_mysql(void)
 	high_level_read_only = srv_read_only_mode
 		|| srv_force_recovery > SRV_FORCE_NO_TRX_UNDO;
 
+        // 只读模式则关闭doublewrite机制
 	if (srv_read_only_mode) {
 		ib::info() << "Started in read only mode";
 
@@ -1714,6 +1715,7 @@ innobase_start_or_create_for_mysql(void)
 
 	srv_buf_pool_size = buf_pool_size_align(srv_buf_pool_size);
 
+        // cleaner线程数要小于或等于buffer pool实例数
 	if (srv_n_page_cleaners > srv_buf_pool_instances) {
 		/* limit of page_cleaner parallelizability
 		is number of buffer pool instances. */
@@ -1830,6 +1832,7 @@ innobase_start_or_create_for_mysql(void)
 		<< size << unit << ", instances = " << srv_buf_pool_instances
 		<< ", chunk size = " << chunk_size << chunk_unit;
 
+        // 初始化buffer pool
 	err = buf_pool_init(srv_buf_pool_size, srv_buf_pool_instances);
 
 	if (err != DB_SUCCESS) {
@@ -1939,6 +1942,7 @@ innobase_start_or_create_for_mysql(void)
 	/* Open or create the data files. */
 	ulint	sum_of_new_sizes;
 
+        // 创建系统表空间
 	err = srv_sys_space.open_or_create(
 		false, create_new_db, &sum_of_new_sizes, &flushed_lsn);
 

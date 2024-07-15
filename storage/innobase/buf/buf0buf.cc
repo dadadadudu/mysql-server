@@ -1754,6 +1754,9 @@ buf_pool_init_instance(
 	buf_pool_mutex_enter(buf_pool);
 
 	if (buf_pool_size > 0) {
+
+                // srv_buf_pool_chunk_unit对应了buffer_pool_chunk_size变量，默认和innodb_buffer_pool_size一样大
+                // 因此默认一个buf_pool
 		buf_pool->n_chunks
 			= buf_pool_size / srv_buf_pool_chunk_unit;
 		chunk_size = srv_buf_pool_chunk_unit;

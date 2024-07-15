@@ -901,7 +901,7 @@ private:
 		/** If rec is the supremum record, then we reset the
 		gap and LOCK_REC_NOT_GAP bits, as all locks on the
 		supremum are automatically of the gap type */
-
+                // 如果要加锁的行是SUPREMUM，则直接加GAP锁
 		if (m_rec_id.m_heap_no == PAGE_HEAP_NO_SUPREMUM) {
 			ut_ad(!(m_mode & LOCK_REC_NOT_GAP));
 

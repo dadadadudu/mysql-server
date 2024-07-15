@@ -494,7 +494,7 @@ dict_boot(void)
 	/*-------------------------*/
 
 	/* Initialize the insert buffer table and index for each tablespace */
-
+        // 初始化插入缓存的表和索引
 	ibuf_init_at_db_start();
 
 	dberr_t	err = DB_SUCCESS;

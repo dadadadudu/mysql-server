@@ -603,13 +603,13 @@ xdes_get_descriptor_with_space_hdr(
 			  && fspace->id <= srv_undo_tablespaces))));
 	ut_ad(size == fspace->size_in_header);
 	ut_ad(flags == fspace->flags);
-
+        // 如果偏移量超过了当前表空间中已有数据的边界，则返回NULL
 	if ((offset >= size) || (offset >= limit)) {
 		return(NULL);
 	}
 
 	const page_size_t	page_size(flags);
-
+        // 根据偏移量得到对应区的第一页的页号
 	descr_page_no = xdes_calc_descriptor_page(page_size, offset);
 
 	buf_block_t*		block;
@@ -632,7 +632,7 @@ xdes_get_descriptor_with_space_hdr(
 	if (desc_block != NULL) {
 		*desc_block = block;
 	}
-
+        // descr_page表示XDES类型的页，里面存的是都是XDES，XDES_ARR_OFFSET=38+112，根据offset得到对应区的index，这样就在descr_page中定位到了offset所对应的XDES
 	return(descr_page + XDES_ARR_OFFSET
 	       + XDES_SIZE * xdes_calc_descriptor_index(page_size, offset));
 }
@@ -1805,7 +1805,7 @@ fsp_alloc_free_extent(
 		descr = xdes_lst_get_descriptor(
 			space_id, page_size, first, mtr);
 	}
-
+        // 移除FSP_FREE链表上XDES_FLST_NODE后的节点，相当于链表的第一个节点
 	flst_remove(header + FSP_FREE, descr + XDES_FLST_NODE, mtr);
 	space->free_len--;
 
@@ -2992,11 +2992,11 @@ fseg_alloc_free_page_low(
 	ut_ad(seg_id);
 	ut_d(fsp_space_modify_check(space_id, mtr));
 	ut_ad(fil_page_get_type(page_align(seg_inode)) == FIL_PAGE_INODE);
-
+        // 计算段中已经使用了多个页面&used，目前总共有多少个页面reserved
 	reserved = fseg_n_reserved_pages_low(seg_inode, &used, mtr);
-
+        // 获取表空间头部
 	space_header = fsp_get_space_header(space_id, page_size, mtr);
-
+        // 根据偏移量hint找到对应的是哪个区，hint表示页的地址
 	descr = xdes_get_descriptor_with_space_hdr(space_header, space_id,
 						   hint, mtr);
 	if (descr == NULL) {

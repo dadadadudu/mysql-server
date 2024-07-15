@@ -457,18 +457,18 @@ ReadView::prepare(trx_id_t id)
 	m_creator_trx_id = id;
 
 	m_low_limit_no = m_low_limit_id = trx_sys->max_trx_id;
-
+        // 赋值当前系统中的所有事务id
 	if (!trx_sys->rw_trx_ids.empty()) {
 		copy_trx_ids(trx_sys->rw_trx_ids);
 	} else {
 		m_ids.clear();
 	}
-
+        // 系统中被激活事务数量大于0
 	if (UT_LIST_GET_LEN(trx_sys->serialisation_list) > 0) {
 		const trx_t*	trx;
-
+                // 获取链表中第一个被激活事务，serialisation_list是按trx::no属性排序的，升序排序，所以第一个就是no最小的事务
 		trx = UT_LIST_GET_FIRST(trx_sys->serialisation_list);
-
+                // 记录最小的事务no
 		if (trx->no < m_low_limit_no) {
 			m_low_limit_no = trx->no;
 		}
@@ -589,7 +589,7 @@ MVCC::view_open(ReadView*& view, trx_t* trx)
 		UT_LIST_REMOVE(m_views, view);
 
 	} else {
-		mutex_enter(&trx_sys->mutex);
+		mutex_enter(&trx_sys->mutex); // 创建ReadView要加锁，因为需要把系统中当前被激活的所有事务的no复制到ReadView中
 
 		view = get_view();
 	}
@@ -599,7 +599,7 @@ MVCC::view_open(ReadView*& view, trx_t* trx)
 		view->prepare(trx->id);
 
 		view->complete();
-
+                // 把view添加到m_views链表中
 		UT_LIST_ADD_FIRST(m_views, view);
 
 		ut_ad(!view->is_closed());

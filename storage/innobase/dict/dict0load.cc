@@ -2866,6 +2866,7 @@ dict_load_table(
 
 	table_name.m_name = const_cast<char*>(name);
 
+        // 根据表名检查是否已经缓存在了dict_sys中
 	result = dict_table_check_if_in_cache_low(name);
 
 	if (!result) {

@@ -5088,9 +5088,9 @@ row_search_mvcc(
 	}
 
 	thr = que_fork_get_first_thr(prebuilt->sel_graph);
-
+        // 将事务状态改为QUE_THR_RUNNING，并对事务中的n_active_thrs加1
 	que_thr_move_to_run_state_for_mysql(thr, trx);
-
+        // 获取表的第一个索引，一定是聚集索引
 	clust_index = dict_table_get_first_index(index->table);
 
 	/* Do some start-of-statement preparations */
@@ -5112,7 +5112,7 @@ row_search_mvcc(
 	} else if (prebuilt->select_lock_type == LOCK_NONE) {
 		/* This is a consistent read */
 		/* Assign a read view for the query */
-
+                // 生成read_view
 		if (!srv_read_only_mode) {
 			trx_assign_read_view(trx);
 		}
@@ -5568,7 +5568,7 @@ wrong_offs:
 		not used. */
 
 		ulint	lock_type;
-
+                // 唯一索引的等值查询unique_search=true，此时加的是LOCK_REC_NOT_GAP
 		if (!set_also_gap_locks
 		    || srv_locks_unsafe_for_binlog
 		    || trx->isolation_level <= TRX_ISO_READ_COMMITTED
@@ -5600,7 +5600,7 @@ wrong_offs:
 no_gap_lock:
 			lock_type = LOCK_REC_NOT_GAP;
 		}
-
+                // 给某一行记录加锁
 		err = sel_set_rec_lock(pcur,
 				       rec, index, offsets,
 				       prebuilt->select_lock_type,
@@ -6288,7 +6288,7 @@ lock_table_wait:
 	}
 
 	thr->lock_state = QUE_THR_LOCK_ROW;
-
+        // 这里会挂起线程，实现锁等待
 	if (row_mysql_handle_errors(&err, trx, thr, NULL)) {
 		/* It was a lock wait, and it ended */
 

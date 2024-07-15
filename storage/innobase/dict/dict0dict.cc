@@ -1211,7 +1211,7 @@ dict_init(void)
 {
 	dict_operation_lock = static_cast<rw_lock_t*>(
 		ut_zalloc_nokey(sizeof(*dict_operation_lock)));
-
+        // 系统字典
 	dict_sys = static_cast<dict_sys_t*>(ut_zalloc_nokey(sizeof(*dict_sys)));
 
 	UT_LIST_INIT(dict_sys->table_LRU, &dict_table_t::table_LRU);
@@ -6094,15 +6094,17 @@ dict_ind_init(void)
 	dict_table_t*		table;
 
 	/* create dummy table and index for REDUNDANT infimum and supremum */
+        // 创建一个table对象，只有一个字段，类型为char(8)，该表属于系统表空间
 	table = dict_mem_table_create("SYS_DUMMY1", DICT_HDR_SPACE, 1, 0, 0, 0);
 	dict_mem_table_add_col(table, NULL, NULL, DATA_CHAR,
 			       DATA_ENGLISH | DATA_NOT_NULL, 8);
-
+        // 针对上面table对象创建了一个index对象
 	dict_ind_redundant = dict_mem_index_create("SYS_DUMMY1", "SYS_DUMMY1",
 						   DICT_HDR_SPACE, 0, 1);
 	dict_index_add_col(dict_ind_redundant, table,
 			   dict_table_get_nth_col(table, 0), 0);
-	dict_ind_redundant->table = table;
+	// 设置索引对应的表
+        dict_ind_redundant->table = table;
 	/* avoid ut_ad(index->cached) in dict_index_get_n_unique_in_tree */
 	dict_ind_redundant->cached = TRUE;
 }

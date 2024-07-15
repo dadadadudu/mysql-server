@@ -1037,6 +1037,7 @@ srv_init(void)
 	dict_ind_init();
 
 	/* Initialize some INFORMATION SCHEMA internal structures */
+        // 初始化information_schema这个库下的表信息
 	trx_i_s_cache_init(trx_i_s_cache);
 
 	ut_crc32_init();

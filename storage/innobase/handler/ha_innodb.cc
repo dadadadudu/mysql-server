@@ -3682,6 +3682,7 @@ innobase_init(
 	/* Check that the value of system variable innodb_page_size was
 	set correctly.  Its value was put into srv_page_size. If valid,
 	return the associated srv_page_size_shift. */
+        // 验证配置的page_size是否合法，必须是2的次方，srv_page_size_shift为次方数，比如16384是2的14次方，如果不合法shift为0
 	srv_page_size_shift = innodb_page_size_validate(srv_page_size);
 	if (!srv_page_size_shift) {
 		sql_print_error("InnoDB: Invalid page size=%lu.\n",
@@ -3700,6 +3701,7 @@ innobase_init(
 	univ_page_size.copy_from(
 		page_size_t(srv_page_size, srv_page_size, false));
 
+        // 设置系统表空间的space_id，固定为0
 	srv_sys_space.set_space_id(TRX_SYS_SPACE);
 
 	/* Create the filespace flags. */
@@ -3855,6 +3857,7 @@ innobase_init(
 		for (use = 0;
 		     use < UT_ARR_SIZE(innobase_change_buffering_values);
 		     use++) {
+                        // 相等为0
 			if (!innobase_strcasecmp(
 				    innobase_change_buffering,
 				    innobase_change_buffering_values[use])) {
@@ -3875,6 +3878,8 @@ innobase_change_buffering_inited_ok:
 		innobase_change_buffering_values[ibuf_use];
 
 	/* Check that interdependent parameters have sane values. */
+        // srv_max_buf_pool_modified_pct对应的就是innodb_max_dirty_pages_pct，高水位
+        // srv_max_dirty_pages_pct_lwm对应的就是innodb_max_dirty_pages_pct_lwm，低水位
 	if (srv_max_buf_pool_modified_pct < srv_max_dirty_pages_pct_lwm) {
 		sql_print_warning("InnoDB: innodb_max_dirty_pages_pct_lwm"
 				  " cannot be set higher than"

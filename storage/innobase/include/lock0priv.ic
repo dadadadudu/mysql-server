@@ -333,7 +333,7 @@ lock_mode_stronger_or_eq(
 {
 	ut_ad((ulint) mode1 < lock_types);
 	ut_ad((ulint) mode2 < lock_types);
-
+        // mode1表示已有锁mode，mode2表示想要加的锁mode
 	return(lock_strength_matrix[mode1][mode2]);
 }
 

@@ -822,15 +822,16 @@ lock_rec_has_to_wait(
 {
 	ut_ad(trx && lock2);
 	ut_ad(lock_get_type_low(lock2) == LOCK_REC);
-
-	if (trx != lock2->trx
+        // trx表示想要加锁的事务，lock2->trx表示已有锁对应事务，type_mode表示trx想要加的锁类型，lock_get_mode(lock2)表示已有锁的类型
+	// 表示两个事务相对同一行记录加不兼容的锁，比如对同一行加not_gap锁
+        if (trx != lock2->trx
 	    && !lock_mode_compatible(static_cast<lock_mode>(
 			             LOCK_MODE_MASK & type_mode),
 				     lock_get_mode(lock2))) {
 
 		/* We have somewhat complex rules when gap type record locks
 		cause waits */
-
+                // 如果想要加的是GAP锁，并且不需要是LOCK_INSERT_INTENTION，则可以直接加，不需要等待
 		if ((lock_is_on_supremum || (type_mode & LOCK_GAP))
 		    && !(type_mode & LOCK_INSERT_INTENTION)) {
 
@@ -842,6 +843,7 @@ lock_rec_has_to_wait(
 			return(FALSE);
 		}
 
+                // 如果相加的不是LOCK_INSERT_INTENTION，并且lock2是GAP锁，也不需要等待
 		if (!(type_mode & LOCK_INSERT_INTENTION)
 		    && lock_rec_get_gap(lock2)) {
 
@@ -851,6 +853,7 @@ lock_rec_has_to_wait(
 			return(FALSE);
 		}
 
+                // 如果想加GAP锁，并且已有锁不是GAP锁，也不需要等待
 		if ((type_mode & LOCK_GAP)
 		    && lock_rec_get_rec_not_gap(lock2)) {
 
@@ -860,6 +863,7 @@ lock_rec_has_to_wait(
 			return(FALSE);
 		}
 
+                // 如果已有锁是插入意向锁，不管想加的是什么锁，都不需要等待
 		if (lock_rec_get_insert_intention(lock2)) {
 
 			/* No lock request needs to wait for an insert
@@ -876,6 +880,7 @@ lock_rec_has_to_wait(
 			return(FALSE);
 		}
 
+                // 如果已有锁和想要加的锁都是not_gap锁，则需要等待
 		return(TRUE);
 	}
 
@@ -1120,11 +1125,22 @@ lock_rec_has_expl(
 	ut_ad((precise_mode & LOCK_MODE_MASK) == LOCK_S
 	      || (precise_mode & LOCK_MODE_MASK) == LOCK_X);
 	ut_ad(!(precise_mode & LOCK_INSERT_INTENTION));
-
+        // 根据heap_no找到对应的lock_t对象，一个heap_no可能对应多个lock_t对象，比如多个事务对同一行加了锁
 	for (lock = lock_rec_get_first(lock_sys->rec_hash, block, heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next(heap_no, lock)) {
+                // mode表示想要加的锁mode
+                // 以下逻辑用来判断当前事务中已有锁的限制范围是否大于想要加的锁的限制范围，如果是，则直接方法当前事务中的锁
+                // 前提条件是
+                // 已有锁不是插入意向锁，不是等待锁
+                // 已有锁不是not_gap锁，或者想加的锁是not_gap锁，或者是想给SUPREMUM记录加锁
+                // 已有锁不是gap锁，或者想加的锁是gap锁，或者是想给SUPREMUM记录加锁
+                // 判断想要加的锁mode和当前事务已有锁的mode，如果已有锁mode大于或等于想要加的锁mode，mode就是限制范围
+                // 比如已有锁mode为X，现在想加的是IS，那么X>IS，X锁的限制范围大于IS
 
+                // 如果当前事务中，heap_no对应的行，已经加了一个not_gap锁，而想要加的是not_gap锁，也符合条件，可以直接利用已有锁，加锁成功
+                // 如果当前事务中，heap_no对应的行，已经加了一个gap锁，而想要加的是gap锁，也符合条件，可以直接利用已有锁，加锁成功
+                // 如果当前事务中，heap_no对应的行是SUPREMUM，则不管已有的锁是gap还是not_gap，直接利用，加锁成功
 		if (lock->trx == trx
 		    && !lock_rec_get_insert_intention(lock)
 		    && lock_mode_stronger_or_eq(
@@ -1212,13 +1228,13 @@ lock_rec_other_has_conflicting(
 	const lock_t*		lock;
 
 	ut_ad(lock_mutex_own());
-
+        // 是不是要给最大记录加锁
 	bool	is_supremum = (heap_no == PAGE_HEAP_NO_SUPREMUM);
 
 	for (lock = lock_rec_get_first(lock_sys->rec_hash, block, heap_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next_const(heap_no, lock)) {
-
+                // lock对象表示当前事务需要等待释放的锁对象
 		if (lock_rec_has_to_wait(trx, mode, lock, is_supremum)) {
 			return(lock);
 		}
@@ -1448,10 +1464,10 @@ RecLock::lock_alloc(
 
 		ulint		n_bytes = size + sizeof(*lock);
 		mem_heap_t*	heap = trx->lock.lock_heap;
-
+                // 缓冲池满了则直接分配
 		lock = reinterpret_cast<lock_t*>(mem_heap_alloc(heap, n_bytes));
 	} else {
-
+                // 从事务的行锁缓存池中获取一个新的lock_t对象
 		lock = trx->lock.rec_pool[trx->lock.rec_cached];
 		++trx->lock.rec_cached;
 	}
@@ -1471,11 +1487,13 @@ RecLock::lock_alloc(
 	if (is_predicate_lock(mode)) {
 
 		rec_lock.n_bits = 8;
-
+                // lock[1]表示lock数组或元组的第二个元素，1表示一个字节
 		memset(&lock[1], 0x0, 1);
 
 	} else {
 		ut_ad(8 * size < UINT32_MAX);
+
+                // size表示字节
 		rec_lock.n_bits = static_cast<uint32_t>(8 * size);
 
 		memset(&lock[1], 0x0, size);
@@ -1486,7 +1504,8 @@ RecLock::lock_alloc(
 	rec_lock.page_no = rec_id.m_page_no;
 
 	/* Set the bit corresponding to rec */
-
+        // 设置lock中heap_no对应的bit为1，表示对应行加了当前锁
+        // 一个锁结构可以表示多行占用了该锁，但是锁的其他信息得一样，比如同一个事务、同一个索引、同样的type_mode
 	lock_rec_set_nth_bit(lock, rec_id.m_heap_no);
 
 	MONITOR_INC(MONITOR_NUM_RECLOCK);
@@ -1508,16 +1527,18 @@ RecLock::lock_add(lock_t* lock, bool add_to_hash)
 
 	if (add_to_hash) {
 		ulint	key = m_rec_id.fold();
-
+                // 表中的行锁统计+1
 		++lock->index->table->n_rec_locks;
-
+                // 将lock对象插入到lock_sys.rec_hash中，lock_hash_get(m_mode)返回的就是rec_hash
 		HASH_INSERT(lock_t, hash, lock_hash_get(m_mode), key, lock);
 	}
 
+        // 如果要进行锁等待，则将lock_t对象添加到lock.wait_lock链表中
 	if (m_mode & LOCK_WAIT) {
 		lock_set_lock_and_trx_wait(lock, lock->trx);
 	}
 
+        // 将lock_t对象添加到lock.trx_locks链表中
 	UT_LIST_ADD_LAST(lock->trx->lock.trx_locks, lock);
 }
 
@@ -1539,7 +1560,7 @@ RecLock::create(
 	ut_ad(owns_trx_mutex == trx_mutex_own(trx));
 
 	/* Create the explicit lock instance and initialise it. */
-
+        // 创建和初始化一个lock_t实例化对象，设置事务、索引、type_mode、heap_no对应的行标志位
 	lock_t*	lock = lock_alloc(trx, m_index, m_mode, m_rec_id, m_size);
 
 	if (prdt != NULL && (m_mode & LOCK_PREDICATE)) {
@@ -1550,11 +1571,11 @@ RecLock::create(
 	/* Ensure that another transaction doesn't access the trx
 	lock state and lock data structures while we are adding the
 	lock and changing the transaction state to LOCK_WAIT */
-
+        // 同一时刻，只能有一个线程修改事务对象trx中的属性
 	if (!owns_trx_mutex) {
 		trx_mutex_enter(trx);
 	}
-
+        // 将lock_t对象添加到lock_sys的rec_hash中，以及trx的lock.trx_locks中
 	lock_add(lock, add_to_hash);
 
 	if (!owns_trx_mutex) {
@@ -1577,7 +1598,7 @@ RecLock::check_deadlock_result(const trx_t* victim_trx, lock_t* lock)
 	ut_ad(trx_mutex_own(m_trx));
 
 	if (victim_trx != NULL) {
-
+                // 当前事务就是victim_trx事务，当前事务要回滚，所以前面创建的锁信息要重置
 		ut_ad(victim_trx == m_trx);
 
 		lock_reset_lock_and_trx_wait(lock);
@@ -1612,16 +1633,17 @@ RecLock::deadlock_check(lock_t* lock)
 	ut_ad(lock_mutex_own());
 	ut_ad(lock->trx == m_trx);
 	ut_ad(trx_mutex_own(m_trx));
-
+        // victim_trx表示输方事务，输方事务会回滚
 	const trx_t*	victim_trx =
 			DeadlockChecker::check_and_resolve(lock, m_trx);
 
 	/* Check the outcome of the deadlock test. It is possible that
 	the transaction that blocked our lock was rolled back and we
 	were granted our lock. */
-
+        // 获取死锁检查结果，要么没有死锁，要么有死锁自己赢了，要么有死锁自己输了，也就是一旦出现了死锁，那就不一直等待，总有一方会立即获得到锁，获得到锁的一方为赢家
 	dberr_t	err = check_deadlock_result(victim_trx, lock);
 
+        // DB_LOCK_WAIT表示没有死锁，没有出现死锁则表示当前事务需要等待
 	if (err == DB_LOCK_WAIT) {
 
 		set_wait_state(lock);
@@ -1722,10 +1744,11 @@ RecLock::add_to_waitq(const lock_t* wait_for, const lock_prdt_t* prdt)
 	/* Do the preliminary checks, and set query thread state */
 
 	prepare();
-
+        // 事务的优先级比较高
 	bool	high_priority = trx_is_high_priority(m_trx);
 
 	/* Don't queue the lock to hash table, if high priority transaction. */
+        // 如果事务优先级比较高，则lock_t对象不需要添加到lock_sys中去
 	lock_t*	lock = create(m_trx, true, !high_priority, prdt);
 
 	/* Attempt to jump over the low priority waiting locks. */
@@ -1737,12 +1760,17 @@ RecLock::add_to_waitq(const lock_t* wait_for, const lock_prdt_t* prdt)
 
 	ut_ad(lock_get_wait(lock));
 
+        // 如果事务的优先级比较低，则进行死锁检测，当然不一定会有死锁
+        // DB_LOCK_WAIT, 没有死锁，但是需要等待
+        // DB_DEADLOCK, 出现了死锁，自己输了
+        // DB_SUCCESS_LOCKED_REC，出现了死锁，自己赢了
 	dberr_t	err = deadlock_check(lock);
 
 	ut_ad(trx_mutex_own(m_trx));
 
 	/* m_trx->mysql_thd is NULL if it's an internal trx. So current_thd is used */
 	if (err == DB_LOCK_WAIT) {
+                // 报告当前线程正在等待另外那个事务的线程
 		thd_report_row_lock_wait(current_thd, wait_for->trx->mysql_thd);
 	}
 	return(err);
@@ -1891,26 +1919,32 @@ lock_rec_lock_fast(
 	ut_ad(dict_index_is_clust(index) || !dict_index_is_online_ddl(index));
 
 	DBUG_EXECUTE_IF("innodb_report_deadlock", return(LOCK_REC_FAIL););
-
+        // 获取记录所在页面对应的第一个lock_t锁结构，如果没找到，则表示整个页面中的行都是无锁，也就表示当前行属于无锁状态
 	lock_t*	lock = lock_rec_get_first_on_page(lock_sys->rec_hash, block);
 
 	trx_t*	trx = thr_get_trx(thr);
 
 	lock_rec_req_status	status = LOCK_REC_SUCCESS;
 
+        // 无锁就加锁
 	if (lock == NULL) {
 
 		if (!impl) {
+
+                        // 初始化m_size
 			RecLock	rec_lock(index, block, heap_no, mode);
 
 			/* Note that we don't own the trx mutex. */
+                        // 创建lock_t对象并给相应属性赋值，并根据heap_no将对应bit位设置为true，表示加锁成功
 			rec_lock.create(trx, false, true);
 		}
 
 		status = LOCK_REC_SUCCESS_CREATED;
 	} else {
 		trx_mutex_enter(trx);
-
+                // 获取找到的lock_t对象所在链表中的下一个lock_t对象，如果存在，则表示一个page对应了多个lock_t对象，快速加锁失败，也就是说只能在一个page只对应一个lock_t对象时才能进行快速加锁
+                // 另外只有当属于同一个事务并且type_mode相同时才能进行快速加锁
+                // 另外如果当前heap_no超出了n_bits也不能快速加锁
 		if (lock_rec_get_next_on_page(lock)
 		     || lock->trx != trx
 		     || lock->type_mode != (mode | LOCK_REC)
@@ -1921,6 +1955,7 @@ lock_rec_lock_fast(
 			/* If the nth bit of the record lock is already set
 			then we do not set a new lock bit, otherwise we do
 			set */
+                        // 所谓的快速加锁就是直接在已有的lock_t对象中设置heap_no对应的bit标记为true
 			if (!lock_rec_get_nth_bit(lock, heap_no)) {
 				lock_rec_set_nth_bit(lock, heap_no);
 				status = LOCK_REC_SUCCESS_CREATED;
@@ -1975,8 +2010,12 @@ lock_rec_lock_slow(
 	dberr_t	err;
 	trx_t*	trx = thr_get_trx(thr);
 
+        // 同一时刻只能有一个线程能访问trx事务对象
 	trx_mutex_enter(trx);
 
+        // mode表示想要加的锁mode
+        // 从当前事务中找到heap_no对应的已有锁，如果已有锁的范围大于现在要加的锁，则不用加锁了，直接加锁成功
+        // 注意，得是同一个事务
 	if (lock_rec_has_expl(mode, block, heap_no, trx)) {
 
 		/* The trx already has a strong enough lock on rec: do
@@ -1985,10 +2024,11 @@ lock_rec_lock_slow(
 		err = DB_SUCCESS;
 
 	} else {
-
+                // wait_for表示需要等待释放的锁对象
 		const lock_t* wait_for = lock_rec_other_has_conflicting(
 			mode, block, heap_no, trx);
 
+                // 需要等待，则创建一个新锁对象，并修改状态为wait，并且记录等待wait_for释放
 		if (wait_for != NULL) {
 
 			/* If another transaction has a non-gap conflicting
@@ -2004,7 +2044,7 @@ lock_rec_lock_slow(
 
 			/* Set the requested lock on the record, note that
 			we already own the transaction mutex. */
-
+                        // 如果不需要等待，就表示没有锁冲突，则创建一个新锁，并添加到lock_sys中和事务的trx_locks中去
 			lock_rec_add_to_queue(
 				LOCK_REC | mode, block, heap_no, index, trx,
 				true);
@@ -2060,12 +2100,20 @@ lock_rec_lock(
 
 	/* We try a simplified and faster subroutine for the most
 	common cases */
+        // 先进行快速加锁，快速加锁如果失败，就进行慢速加锁
+        // 所谓的快速加锁，就是判断是否满足条件，要么直接创建一个新的lock_t对象进行加锁，要么基于已有的lock_t对象通过设置bit位进行加锁
+        // 快速加锁的条件为，当前行所在的page无锁，无锁则直接创建新的lock_t对象进行加锁，或者当前行所在的page有且只有一个lock_t锁对象，
+        // 并且锁的事务和type_mode和当前要加的锁相同，则可以直接利用该lock_t对象，根据heap_no修改bit为true即可完成加锁
+
+        // 比如同一个事务中，对同一page中的不同的两行记录，都加LOCK_REC_NOT_GAP类型的锁，那么此时就能公用一个lock_t对象进行快速加锁成功
+        // 前提是，这个page只有一个lock_t对象，如果有多个，则无法快速决定用哪个一个lock_t对象
 	switch (lock_rec_lock_fast(impl, mode, block, heap_no, index, thr)) {
 	case LOCK_REC_SUCCESS:
 		return(DB_SUCCESS);
 	case LOCK_REC_SUCCESS_CREATED:
 		return(DB_SUCCESS_LOCKED_REC);
 	case LOCK_REC_FAIL:
+                // 如果不满足快速加锁的条件，则会快速加锁失败，则要进行慢速加锁
 		return(lock_rec_lock_slow(impl, mode, block,
 					  heap_no, index, thr));
 	}
@@ -5934,9 +5982,10 @@ lock_rec_insert_check_and_lock(
 	least IX-locked. When we are building an index, we would pass
 	BTR_NO_LOCKING_FLAG and skip the locking altogether. */
 	ut_ad(lock_table_has(trx, index->table, LOCK_IX));
-
+        // heap_no表示新增记录的下一条记录的heap_no
+        // 得到新增记录的下一条记录的队友的lock
 	lock = lock_rec_get_first(lock_sys->rec_hash, block, heap_no);
-
+        // 如果不存在锁，则直接插入
 	if (lock == NULL) {
 		/* We optimize CPU time usage in the simplest case */
 
@@ -5971,14 +6020,15 @@ lock_rec_insert_check_and_lock(
 	eliminates an unnecessary deadlock which resulted when 2 transactions
 	had to wait for their insert. Both had waiting gap type lock requests
 	on the successor, which produced an unnecessary deadlock. */
-
+        // 如果存在锁，则要判断存在的锁支不支持当前事务插入数据
 	const ulint	type_mode = LOCK_X | LOCK_GAP | LOCK_INSERT_INTENTION;
 
+        // 获取需要等待的锁，与当前type_mode冲突的锁就是需要等待的锁
 	const lock_t*	wait_for = lock_rec_other_has_conflicting(
 				type_mode, block, heap_no, trx);
-
+        // 表示不支持，当前insert操作需要阻塞
 	if (wait_for != NULL) {
-
+                // 需要针对heap_no，也就是新增记录的下一条记录添加一把新锁，新锁的type_mode就是上面定义的type_mode（既是插入意向锁，也是gap锁），这就解释了为什么新增记录后，查看INFORMATION_SCHEMA.INNODB_LOCKS会发现同一条记录有两条锁记录
 		RecLock	rec_lock(thr, index, block, heap_no, type_mode);
 
 		trx_mutex_enter(trx);
@@ -6404,7 +6454,7 @@ lock_clust_rec_read_check_and_lock(
 
 		return(DB_SUCCESS);
 	}
-
+        // 当前记录在page中的heap_no
 	heap_no = page_rec_get_heap_no(rec);
 
 	if (heap_no != PAGE_HEAP_NO_SUPREMUM) {
