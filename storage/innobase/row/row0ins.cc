@@ -2509,7 +2509,7 @@ row_ins_clust_index_entry_low(
 	      || n_uniq == dict_index_get_n_unique(index));
 	ut_ad(!n_uniq || n_uniq == dict_index_get_n_unique(index));
 	ut_ad(!thr_get_trx(thr)->in_rollback);
-
+        // mtr是用来记录redo log的
 	mtr_start(&mtr);
 	mtr.set_named_space(index->space);
 
@@ -2534,7 +2534,9 @@ row_ins_clust_index_entry_low(
 	/* Note that we use PAGE_CUR_LE as the search mode, because then
 	the function will return in both low_match and up_match of the
 	cursor sensible values */
-	btr_pcur_open(index, entry, PAGE_CUR_LE, mode, &pcur, &mtr);
+        // 会进入到btr0pcur.ic中的btr_pcur_open_low()函数
+	// 会从索引对应的B+树的叶子节点开始找
+        btr_pcur_open(index, entry, PAGE_CUR_LE, mode, &pcur, &mtr);
 	cursor = btr_pcur_get_btr_cur(&pcur);
 	cursor->thr = thr;
 
@@ -2543,10 +2545,12 @@ row_ins_clust_index_entry_low(
 
 #ifdef UNIV_DEBUG
 	{
-		page_t*	page = btr_cur_get_page(cursor);
+		// 当前游标所在页
+                page_t*	page = btr_cur_get_page(cursor);
+                // 当前游标所在页的第一条记录，最小记录的下一条记录
 		rec_t*	first_rec = page_rec_get_next(
 			page_get_infimum_rec(page));
-
+                // 最小记录的下一条记录是最大记录，则表示页中是空的
 		ut_ad(page_rec_is_supremum(first_rec)
 		      || rec_n_fields_is_sane(index, first_rec, entry));
 	}
@@ -3297,14 +3301,15 @@ row_ins_clust_index_entry(
 			DBUG_RETURN(err);
 		}
 	}
-
+        // 唯一键的字段个数
 	n_uniq = dict_index_is_unique(index) ? index->n_uniq : 0;
 
 	/* Try first optimistic descent to the B-tree */
 	ulint	flags;
-
+        // 不是内部表
 	if (!dict_table_is_intrinsic(index->table)) {
 		log_free_check();
+                // 如果是临时表，则不用加锁，临时表只有当前事务用
 		flags = dict_table_is_temporary(index->table)
 			? BTR_NO_LOCKING_FLAG
 			: 0;
@@ -3323,6 +3328,7 @@ row_ins_clust_index_entry(
 		err = row_ins_sorted_clust_index_entry(
 			BTR_MODIFY_LEAF, index, entry, n_ext, thr);
 	} else {
+                // 核心的插入操作，BTR_MODIFY_LEAF表示修改叶子节点，需要加X锁
 		err = row_ins_clust_index_entry_low(
 			flags, BTR_MODIFY_LEAF, index, n_uniq, entry,
 			n_ext, thr, dup_chk_only);
@@ -3459,10 +3465,11 @@ row_ins_index_entry(
 	DBUG_EXECUTE_IF("row_ins_index_entry_timeout", {
 			DBUG_SET("-d,row_ins_index_entry_timeout");
 			return(DB_LOCK_WAIT);});
-
+        // 聚集索引
 	if (dict_index_is_clust(index)) {
 		return(row_ins_clust_index_entry(index, entry, thr, 0, false));
 	} else {
+        // 二级索引
 		return(row_ins_sec_index_entry(index, entry, thr, false));
 	}
 }
@@ -3602,7 +3609,7 @@ row_ins_index_entry_step(
 	DBUG_ENTER("row_ins_index_entry_step");
 
 	ut_ad(dtuple_check_typed(node->row));
-
+        // 将row中的内容复制给entry，只需要复制索引键对应的字段内容就可以了
 	err = row_ins_index_entry_set_vals(node->index, node->entry, node->row);
 
 	if (err != DB_SUCCESS) {
@@ -3610,7 +3617,7 @@ row_ins_index_entry_step(
 	}
 
 	ut_ad(dtuple_check_typed(node->entry));
-
+        // 将索引记录插入到索引中，核心
 	err = row_ins_index_entry(node->index, node->entry, thr);
 
 	DEBUG_SYNC_C_IF_THD(thr_get_trx(thr)->mysql_thd,
@@ -3630,7 +3637,7 @@ row_ins_alloc_row_id_step(
 	row_id_t	row_id;
 
 	ut_ad(node->state == INS_NODE_ALLOC_ROW_ID);
-
+        // 获取当前表的第一个index，如果是唯一索引，则不需要生成row id隐藏字段了
 	if (dict_index_is_unique(dict_table_get_first_index(node->table))) {
 
 		/* No row id is stored if the clustered index is unique */
@@ -3641,7 +3648,7 @@ row_ins_alloc_row_id_step(
 	/* Fill in row id value to row */
 
 	row_id = dict_sys_get_new_row_id();
-
+        // 把row_id存到ins_node中
 	dict_sys_write_row_id(node->row_id_buf, row_id);
 }
 
@@ -3727,28 +3734,33 @@ row_ins(
 	DBUG_PRINT("row_ins", ("table: %s", node->table->name.m_name));
 
 	if (node->state == INS_NODE_ALLOC_ROW_ID) {
-
+                // 分配row_id
 		row_ins_alloc_row_id_step(node);
-
+                // 新增记录可能需要插入到多个索引中，此处先找出表的第一个索引
 		node->index = dict_table_get_first_index(node->table);
+                // 找出需要插到第一个第一个索引中对应的第一个entry
 		node->entry = UT_LIST_GET_FIRST(node->entry_list);
 
 		if (node->ins_type == INS_SEARCHED) {
-
+                        // 处理以下情况：insert into t1(name) select name from t2 where id = 1
+                        // 从select语句获取要插入的数据
 			row_ins_get_row_from_select(node);
 
 		} else if (node->ins_type == INS_VALUES) {
-
+                        // 处理以下情况：insert into t1(id, name, age) values(8, 'zhouyu', 22);
+                        // 从values获取要插入的数据，仔细看方法的实现，values中可以写表达式
 			row_ins_get_row_from_values(node);
 		}
-
+                // 此状态表示需要为索引构建entry并插入到索引中去
 		node->state = INS_NODE_INSERT_ENTRIES;
 	}
 
 	ut_ad(node->state == INS_NODE_INSERT_ENTRIES);
 
+        // 依次插入每个索引
 	while (node->index != NULL) {
 		if (node->index->type != DICT_FTS) {
+                        // 插入到索引中去
 			err = row_ins_index_entry_step(node, thr);
 			switch(err) {
 			case DB_SUCCESS:
@@ -3764,6 +3776,7 @@ row_ins(
 			}
 		}
 
+                // 插入完之后获取下一个索引
 		node->index = dict_table_get_next_index(node->index);
 		node->entry = UT_LIST_GET_NEXT(tuple_list, node->entry);
 

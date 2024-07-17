@@ -59,7 +59,7 @@ dict_hdr_get(
 {
 	buf_block_t*	block;
 	dict_hdr_t*	header;
-
+        // 获取系统表空间page_no=7的页，该页存在的系统数据字典信息
 	block = buf_page_get(page_id_t(DICT_HDR_SPACE, DICT_HDR_PAGE_NO),
 			     univ_page_size, RW_X_LATCH, mtr);
 	header = DICT_HDR + buf_block_get_frame(block);
@@ -168,7 +168,7 @@ dict_hdr_flush_row_id(void)
 	mtr_start(&mtr);
 
 	dict_hdr = dict_hdr_get(&mtr);
-
+        // 把row_id保存到系统表空间中
 	mlog_write_ull(dict_hdr + DICT_HDR_ROW_ID, id, &mtr);
 
 	mtr_commit(&mtr);

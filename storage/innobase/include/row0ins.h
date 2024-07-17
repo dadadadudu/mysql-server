@@ -216,26 +216,26 @@ row_ins_step(
 
 struct ins_node_t{
 	que_common_t	common;	/*!< node type: QUE_NODE_INSERT */
-	ulint		ins_type;/* INS_VALUES, INS_SEARCHED, or INS_DIRECT */
-	dtuple_t*	row;	/*!< row to insert */
-	dict_table_t*	table;	/*!< table where to insert */
-	sel_node_t*	select;	/*!< select in searched insert */
+	ulint		ins_type;/* INS_VALUES, INS_SEARCHED, or INS_DIRECT 普通的insert语句对应的类型就是INS_VALUES*/
+	dtuple_t*	row;	/*!< row to insert 表示需要插入的数据元组*/
+	dict_table_t*	table;	/*!< table where to insert 表信息*/
+	sel_node_t*	select;	/*!< select in searched insert insert...select语句对应的select部分*/
 	que_node_t*	values_list;/* list of expressions to evaluate and
-				insert in an INS_VALUES insert */
-	ulint		state;	/*!< node execution state */
+				insert in an INS_VALUES insert insert语句的values列表*/
+	ulint		state;	/*!< node execution state 执行状态*/
 	dict_index_t*	index;	/*!< NULL, or the next index where the index
-				entry should be inserted */
+				entry should be inserted 插入操作当前需要插入到哪个index，一个插入操作可能需要插入到多个索引中*/
 	dtuple_t*	entry;	/*!< NULL, or entry to insert in the index;
 				after a successful insert of the entry,
-				this should be reset to NULL */
+				this should be reset to NULL 和row类似，都是dtuple_t类型，entry表示要插入到index的数据*/
 	UT_LIST_BASE_NODE_T(dtuple_t)
-			entry_list;/* list of entries, one for each index */
-	byte*		row_id_buf;/* buffer for the row id sys field in row */
+			entry_list;/* list of entries, one for each index 当要插入多个索引时，每个索引对应一个entry，这些entry将组成一个链表*/
+	byte*		row_id_buf;/* buffer for the row id sys field in row 用来存储新增记录的row_id，对应的就是行里面的row_id隐藏字段，如果需要的话*/
 	trx_id_t	trx_id;	/*!< trx id or the last trx which executed the
-				node */
-	byte*		trx_id_buf;/* buffer for the trx id sys field in row */
+				node 执行插入操作的当前事务id*/
+	byte*		trx_id_buf;/* buffer for the trx id sys field in row 对应的就是行里面的trx_id隐藏字段*/
 	mem_heap_t*	entry_sys_heap;
-				/* memory heap used as auxiliary storage;
+				/* memory heap used as auxiliary storage; 用来辅助存储的，比如上面提到的每个entry对象都会存在这里，以及其他信息，上面很多属性都是指针，对应的真正内容都存在了这里
 				entry_list and sys fields are stored here;
 				if this is NULL, entry list should be created
 				and buffers for sys fields in row allocated */

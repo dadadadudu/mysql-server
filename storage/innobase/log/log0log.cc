@@ -1250,7 +1250,7 @@ loop:
 
 	log_write_mutex_enter();
 	ut_ad(!recv_no_log_write);
-
+        // limit_lsn表示当前已经写到log_file中的lsn
 	lsn_t	limit_lsn = flush_to_disk
 		? log_sys->flushed_to_disk_lsn
 		: log_sys->write_lsn;
@@ -1301,6 +1301,10 @@ loop:
 	}
 
 	log_mutex_enter();
+        // log_sys->buf_free表示当前log buffer中空闲区域的开始位置
+        // log_sys->buf_next_to_write表示log buffer中需要写到log file中的开始位置
+        // buf_next_to_write可能小于buf_free，表示log buffer中有日志还没有刷新到磁盘
+        // 如果等于，则表示log buffer中没有日志需要刷新到磁盘
 	if (!flush_to_disk
 	    && log_sys->buf_free == log_sys->buf_next_to_write) {
 		/* Nothing to write and no flush to disk requested */
@@ -1326,6 +1330,7 @@ loop:
 		MONITOR_INC(MONITOR_PENDING_LOG_FLUSH);
 		os_event_reset(log_sys->flush_event);
 
+                // 没有日志需要刷新到磁盘
 		if (log_sys->buf_free == log_sys->buf_next_to_write) {
 			/* Nothing to write, flush only */
 			log_mutex_exit_all();
@@ -1342,8 +1347,10 @@ loop:
 
 	ut_ad(area_end - area_start > 0);
 
+        // 设置准备刷新到磁盘中的第一个block的flush bit，表示该block是本次刷新的第一个log block
 	log_block_set_flush_bit(log_sys->buf + area_start, TRUE);
-	log_block_set_checkpoint_no(
+	// 设置准备刷新到磁盘中的最后一个block的LOG_BLOCK_CHECKPOINT_NO，值为log_sys->next_checkpoint_no
+        log_block_set_checkpoint_no(
 		log_sys->buf + area_end - OS_FILE_LOG_BLOCK_SIZE,
 		log_sys->next_checkpoint_no);
 
@@ -1423,6 +1430,7 @@ log_buffer_flush_to_disk(
 	bool sync)
 {
 	ut_ad(!srv_read_only_mode);
+        // log_get_lsn()表示获取当前系统中的lsn,log_sys->lsn,表示当前系统中最大的日志序列号
 	log_write_up_to(log_get_lsn(), sync);
 }
 
