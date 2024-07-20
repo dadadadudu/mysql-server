@@ -361,11 +361,12 @@ dict_boot(void)
 	dict_mem_table_add_col(table, heap, "SPACE", DATA_INT, 0, 4);
 
 	table->id = DICT_TABLES_ID;
-
+        // 添加到哈希表
 	dict_table_add_to_cache(table, FALSE, heap);
 	dict_sys->sys_tables = table;
 	mem_heap_empty(heap);
 
+        // SYS_TABLES表中的NAME字段作为主键生成聚集索引，利用该索引，可以根据表名快速找到表信息
 	index = dict_mem_index_create("SYS_TABLES", "CLUST_IND",
 				      DICT_HDR_SPACE,
 				      DICT_UNIQUE | DICT_CLUSTERED, 1);
@@ -382,6 +383,7 @@ dict_boot(void)
 	ut_a(error == DB_SUCCESS);
 
 	/*-------------------------*/
+        // SYS_TABLES表中的ID字段作为二级索引，也可以根据table_id快速找到表信息
 	index = dict_mem_index_create("SYS_TABLES", "ID_IND",
 				      DICT_HDR_SPACE, DICT_UNIQUE, 1);
 	dict_mem_index_add_field(index, "ID", 0);
@@ -428,6 +430,7 @@ dict_boot(void)
 	ut_a(error == DB_SUCCESS);
 
 	/*-------------------------*/
+        // 创建SYS_INDEXES表
 	table = dict_mem_table_create("SYS_INDEXES", DICT_HDR_SPACE,
 				      DICT_NUM_COLS__SYS_INDEXES, 0, 0, 0);
 
@@ -446,6 +449,7 @@ dict_boot(void)
 	dict_sys->sys_indexes = table;
 	mem_heap_empty(heap);
 
+        // 给SYS_INDEXES表创建一个聚集索引，索引键为（TABLE_ID，ID），SYS_INDEXES中的数据会自动按（TABLE_ID，ID）进行排序
 	index = dict_mem_index_create("SYS_INDEXES", "CLUST_IND",
 				      DICT_HDR_SPACE,
 				      DICT_UNIQUE | DICT_CLUSTERED, 2);
@@ -491,6 +495,7 @@ dict_boot(void)
 
 	mtr_commit(&mtr);
 
+        // 到此完成了数据字典中SYS_TABLES、SYS_INDEXES等表以及聚集索引的创建，通过聚集索引可以进一步从磁盘中得到表的数据，从而加载到内存中
 	/*-------------------------*/
 
 	/* Initialize the insert buffer table and index for each tablespace */
@@ -511,7 +516,7 @@ dict_boot(void)
 		err = DB_ERROR;
 	} else {
 		/* Load definitions of other indexes on system tables */
-
+                // 加载以下四个表的其他索引的定义信息，相当于把这几个表中除开聚集索引之外的其他索引的根页都从磁盘中加载到内存
 		dict_load_sys_table(dict_sys->sys_tables);
 		dict_load_sys_table(dict_sys->sys_columns);
 		dict_load_sys_table(dict_sys->sys_indexes);

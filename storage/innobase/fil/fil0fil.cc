@@ -4774,6 +4774,7 @@ fil_space_for_table_exists_in_mem(
 
 	/* Look if there is a space with the same id */
 
+        // 从fil_system->spaces哈希表中根据space_id找fil_space_t对象
 	space = fil_space_get_by_id(id);
 
 	if (space != NULL

@@ -2258,7 +2258,7 @@ files_checked:
 
 			return(srv_init_abort(DB_ERROR));
 		}
-
+                // 初始化事务系统
 		purge_queue = trx_sys_init_at_db_start();
 
 		if (srv_force_recovery < SRV_FORCE_NO_LOG_REDO) {
@@ -2308,6 +2308,8 @@ files_checked:
 			so that tablespace names and other metadata can be
 			found. */
 			srv_sys_tablespaces_open = true;
+
+                        // 加载SYS_TABLESPACES、SYS_DATAFILES两个表，从而可以获取某个表空间的详细信息，比如表空间的大小、文件路径
 			err = dict_create_or_check_sys_tablespace();
 			if (err != DB_SUCCESS) {
 				return(srv_init_abort(err));

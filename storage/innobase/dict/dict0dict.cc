@@ -1288,9 +1288,9 @@ dict_table_open_on_name(
 
 	ut_ad(table_name);
 	ut_ad(mutex_own(&dict_sys->mutex));
-
+        // 根据表名从dict_sys->table_hash哈希表中找对应的dict_table_t对象
 	table = dict_table_check_if_in_cache_low(table_name);
-
+        // 没找到，则加载
 	if (table == NULL) {
 		table = dict_load_table(table_name, true, ignore_err);
 	}
@@ -3185,13 +3185,15 @@ dict_index_copy_types(
 
 		return;
 	}
-
+        // 遍历索引中的每个字段
 	for (i = 0; i < n_fields; i++) {
 		const dict_field_t*	ifield;
 		dtype_t*		dfield_type;
-
+                // 获取每个字段的类型
 		ifield = dict_index_get_nth_field(index, i);
 		dfield_type = dfield_get_type(dtuple_get_nth_field(tuple, i));
+
+                // 获取字段对应的列，将列的类型复制给索引字段的类型
 		dict_col_copy_type(dict_field_get_col(ifield), dfield_type);
 		if (dict_index_is_spatial(index)
 		    && DATA_GEOMETRY_MTYPE(dfield_type->mtype)) {

@@ -914,7 +914,7 @@ struct btr_cur_t {
 	que_thr_t*	thr;		/*!< this field is only used
 					when btr_cur_search_to_nth_level
 					is called for an index entry
-					insertion: the calling query
+				    	insertion: the calling query
 					thread is passed here to be
 					used in the insert buffer */
 	/*------------------------------*/

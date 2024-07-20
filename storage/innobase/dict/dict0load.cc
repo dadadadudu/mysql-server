@@ -2265,6 +2265,7 @@ dict_load_index_low(
 		*index = NULL;
 	}
 
+        // 如果当前记录被删除了，那么返回记录被删除的错误信息
 	if (rec_get_deleted_flag(rec, 0)) {
 		return(dict_load_index_del);
 	}
@@ -2292,7 +2293,7 @@ dict_load_index_low(
 	} else {
 		return("wrong number of columns in SYS_INDEXES record");
 	}
-
+        // 获取当前记录的table_id字段
 	field = rec_get_nth_field_old(
 		rec, DICT_FLD__SYS_INDEXES__TABLE_ID, &len);
 	if (len != 8) {
@@ -2309,6 +2310,7 @@ err_len:
 		return(dict_load_index_id_err);
 	}
 
+        // 获取当前记录的index_id字段
 	field = rec_get_nth_field_old(
 		rec, DICT_FLD__SYS_INDEXES__ID, &len);
 	if (len != 8) {
@@ -2368,6 +2370,7 @@ err_len:
 	}
 
 	if (allocate) {
+                // 创建一个dict_index_t对象
 		*index = dict_mem_index_create(table_name, name_buf,
 					       space, type, n_fields);
 	} else {
@@ -2377,6 +2380,7 @@ err_len:
 					   space, type, n_fields);
 	}
 
+        // 给dict_index_t对象对象其他属性赋值
 	(*index)->id = id;
 	(*index)->page = mach_read_from_4(field);
 	ut_ad((*index)->page);
@@ -2388,6 +2392,8 @@ err_len:
 /********************************************************************//**
 Loads definitions for table indexes. Adds them to the data dictionary
 cache.
+读取指定表的所有索引定义，并把它们添加到数据字典中，索引定义数据存放在了SYS_INDEXES中
+本质上，就是从SYS_INDEXES中找出指定table id的数据，相当于执行select * from information_schema.INNODB_SYS_INDEXES where table_id = 1;
 @return DB_SUCCESS if ok, DB_CORRUPTION if corruption of dictionary
 table or DB_UNSUPPORTED if table has unknown index type */
 static MY_ATTRIBUTE((nonnull))
@@ -2413,30 +2419,37 @@ dict_load_indexes(
 	ut_ad(mutex_own(&dict_sys->mutex));
 
 	mtr_start(&mtr);
-
+        // 获取SYS_INDEXES表
 	sys_indexes = dict_table_get_low("SYS_INDEXES");
+        // 得到SYS_INDEXES的第一个索引，也就是聚集索引，后面通过这个聚集索引来获取表中的数据
 	sys_index = UT_LIST_GET_FIRST(sys_indexes->indexes);
 	ut_ad(!dict_table_is_comp(sys_indexes));
 	ut_ad(name_of_col_is(sys_indexes, sys_index,
 			     DICT_FLD__SYS_INDEXES__NAME, "NAME"));
 	ut_ad(name_of_col_is(sys_indexes, sys_index,
 			     DICT_FLD__SYS_INDEXES__PAGE_NO, "PAGE_NO"));
-
+        // 创建一个只有一个字段的数据元组
 	tuple = dtuple_create(heap, 1);
+        // 从元组中得到该字段对象
 	dfield = dtuple_get_nth_field(tuple, 0);
-
+        // 创建一块8个字节的内存，并且把table id设置进去
 	buf = static_cast<byte*>(mem_heap_alloc(heap, 8));
 	mach_write_to_8(buf, table->id);
 
+        // 把table id设置给数据元组中唯一的字段
 	dfield_set_data(dfield, buf, 8);
-	dict_index_copy_types(tuple, sys_index, 1);
+	// 把索引的第一个字段的类型，通过前面代码得知就是TABLE_ID字段的类型，复制给tuple中的第一个字段
+        dict_index_copy_types(tuple, sys_index, 1);
 
-	btr_pcur_open_on_user_rec(sys_index, tuple, PAGE_CUR_GE,
+        // 根据数据元组，定位索引树中的记录，BTR_SEARCH_LEAF表示定义叶子节点中的记录，PAGE_CUR_GE表示定位大于等于tuple条件的所有记录的第一条记录（最左边那条），如果不存在，则执行叶子节点的最后一条记录
+	// tuple表示的是table，表示当前要加载这个表相关的数据，包括聚集索引和辅助索引上的数据
+        // 注意：定位到记录后，接下来的代码会判断该记录的table id，如果发现不等于指定的table id，则认为当前定位到的记录之后的记录也是不符合要求的（因为）
+        btr_pcur_open_on_user_rec(sys_index, tuple, PAGE_CUR_GE,
 				  BTR_SEARCH_LEAF, &pcur, &mtr);
 	for (;;) {
 		dict_index_t*	index = NULL;
 		const char*	err_msg;
-
+                // 判断是否定位在了最大或最小记录
 		if (!btr_pcur_is_on_user_rec(&pcur)) {
 
 			/* We should allow the table to open even
@@ -2455,7 +2468,7 @@ dict_load_indexes(
 
 			break;
 		}
-
+                // 获取当前定位的记录
 		rec = btr_pcur_get_rec(&pcur);
 
 		if ((ignore_err & DICT_ERR_IGNORE_RECOVER_LOCK)
@@ -2480,11 +2493,12 @@ dict_load_indexes(
 			}
 		}
 
+                // 基于rec创建dict_index_t对象，&index指向的就是dict_index_t对象
 		err_msg = dict_load_index_low(
 			buf, table->name.m_name, heap, rec, TRUE, &index);
 		ut_ad((index == NULL && err_msg != NULL)
 		      || (index != NULL && err_msg == NULL));
-
+                // 当前遍历的记录的table_id不匹配
 		if (err_msg == dict_load_index_id_err) {
 			/* TABLE_ID mismatch means that we have
 			run out of index definitions for the table. */
@@ -2673,11 +2687,15 @@ dict_load_table_low(
 	ulint		flags2;
 	ulint		n_v_col;
 
+        // rec为sys_tables表中的一条记录的指针
+
+        // 先对该记录进行校验，比如记录是否被标记为了已删除
 	const char* error_text = dict_sys_tables_rec_check(rec);
 	if (error_text != NULL) {
 		return(error_text);
 	}
 
+        // 将该记录的各个列信息读取出来赋值给各个变量
 	dict_sys_tables_rec_read(rec, name, &table_id, &space_id,
 				 &t_num, &flags, &flags2);
 
@@ -2685,8 +2703,10 @@ dict_load_table_low(
 		return("incorrect flags in SYS_TABLES");
 	}
 
+        // 得到具体的非虚拟列数和虚拟列数
 	dict_table_decode_n_col(t_num, &n_cols, &n_v_col);
 
+        // 根据这些属性创建dict_table_t对象
 	*table = dict_mem_table_create(
 		name.m_name, space_id, n_cols + n_v_col, n_v_col, flags, flags2);
 	(*table)->id = table_id;
@@ -2868,7 +2888,7 @@ dict_load_table(
 
         // 根据表名检查是否已经缓存在了dict_sys中
 	result = dict_table_check_if_in_cache_low(name);
-
+        // result为NULL时符合判断，NULL相当于false
 	if (!result) {
 		result = dict_load_table_one(table_name, cached, ignore_err,
 					     fk_list);
@@ -2914,6 +2934,7 @@ dict_load_tablespace(
 		return;
 	}
 
+        //  CREATE TEMPORARY TABLE创建的临时表，这种表只在当前会话中存在，并会话结束后会自动删除
 	if (dict_table_is_temporary(table)) {
 		/* Do not bother to retry opening temporary tables. */
 		table->ibd_file_missing = TRUE;
@@ -3057,7 +3078,7 @@ dict_load_table_one(
 	heap = mem_heap_create(32000);
 
 	mtr_start(&mtr);
-
+        // 利用SYS_TABLES的聚集索引找到指定表名对应的记录，从而找到该表的表空间
 	sys_tables = dict_table_get_low("SYS_TABLES");
 	sys_index = UT_LIST_GET_FIRST(sys_tables->indexes);
 	ut_ad(!dict_table_is_comp(sys_tables));
@@ -3072,15 +3093,19 @@ dict_load_table_one(
 	ut_ad(name_of_col_is(sys_tables, sys_index,
 			     DICT_FLD__SYS_TABLES__SPACE, "SPACE"));
 
+        // 构造表名查询数据组
 	tuple = dtuple_create(heap, 1);
 	dfield = dtuple_get_nth_field(tuple, 0);
 
 	dfield_set_data(dfield, name.m_name, ut_strlen(name.m_name));
 	dict_index_copy_types(tuple, sys_index, 1);
 
+        // 根据表名到SYS_TABLES的聚集索引中进行查找
 	btr_pcur_open_on_user_rec(sys_index, tuple, PAGE_CUR_GE,
 				  BTR_SEARCH_LEAF, &pcur, &mtr);
-	rec = btr_pcur_get_rec(&pcur);
+
+        // 得到对应的记录，如果该记录对应的表名不是指定表名，则表示该表不存在
+        rec = btr_pcur_get_rec(&pcur);
 
 	if (!btr_pcur_is_on_user_rec(&pcur)
 	    || rec_get_deleted_flag(rec, 0)) {
@@ -3103,6 +3128,7 @@ err_exit:
 		goto err_exit;
 	}
 
+        // 根据表名，比如user_info，从SYS_TABLES中找到了记录，创建对应的dict_table_t对象
 	err_msg = dict_load_table_low(name, rec, &table);
 
 	if (err_msg) {
@@ -3116,6 +3142,7 @@ err_exit:
 
 	dict_load_tablespace(table, heap, ignore_err);
 
+        // 从SYS_COLUMNS找到表的字段信息，设置到dict_table_t对象中
 	dict_load_columns(table, heap);
 
 	dict_load_virtual(table, heap);
@@ -3138,6 +3165,7 @@ err_exit:
 		&& table->ibd_file_missing
 		? DICT_ERR_IGNORE_ALL
 		: ignore_err;
+        // 从SYS_INDEXES中找到表的索引信息，设置到dict_table_t对象中
 	err = dict_load_indexes(table, heap, index_load_err);
 
 	if (err == DB_INDEX_CORRUPT) {
