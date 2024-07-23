@@ -5112,7 +5112,7 @@ row_search_mvcc(
 	} else if (prebuilt->select_lock_type == LOCK_NONE) {
 		/* This is a consistent read */
 		/* Assign a read view for the query */
-                // 生成read_view
+                // LOCK_NONE表示当前SQL执行不需要加锁，只需要保证一致性读就行了，比如最普通的select查询，生成read_view
 		if (!srv_read_only_mode) {
 			trx_assign_read_view(trx);
 		}
@@ -5120,6 +5120,7 @@ row_search_mvcc(
 		prebuilt->sql_stat_start = FALSE;
 	} else {
 wait_table_again:
+                // 加表锁，要么是LOCK_IS，要么是LOCK_IX
 		err = lock_table(0, index->table,
 				 prebuilt->select_lock_type == LOCK_S
 				 ? LOCK_IS : LOCK_IX, thr);
@@ -5252,7 +5253,7 @@ rec_loop:
 
 	/*-------------------------------------------------------------*/
 	/* PHASE 4: Look for matching records in a loop */
-
+        // 获取pcur指向的记录，比如一开始指向的是page中的最小记录
 	rec = btr_pcur_get_rec(pcur);
 
 	ut_ad(!!page_rec_is_comp(rec) == comp);
@@ -5262,7 +5263,7 @@ rec_loop:
 		/* The infimum record on a page cannot be in the result set,
 		and neither can a record lock be placed on it: we skip such
 		a record. */
-
+                // 直接取下一行
 		prev_rec = NULL;
 		goto next_rec;
 	}

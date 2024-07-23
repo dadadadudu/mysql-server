@@ -305,25 +305,37 @@ private:
 
 private:
 	/** The read should not see any transaction with trx id >= this
-	value. In other words, this is the "high water mark". */
+	value. In other words, this is the "high water mark".
+	 当前事务，不能看到，大于等于m_low_limit_id的事务id生成的undo log
+	 当前事务，只能看到，小于m_low_limit_id的事务id生成的undo log
+	 */
 	trx_id_t	m_low_limit_id;
 
 	/** The read should see all trx ids which are strictly
 	smaller (<) than this value.  In other words, this is the
-	low water mark". */
+	low water mark".
+         当前事务，能看到，小于m_up_limit_id的事务id生成的undo log
+         当前事务，不能看到，大于等于m_up_limit_id的事务id生成的undo log
+	 */
 	trx_id_t	m_up_limit_id;
 
 	/** trx id of creating transaction, set to TRX_ID_MAX for free
-	views. */
+	views.
+	 创建此ReadView的事务id
+	 */
 	trx_id_t	m_creator_trx_id;
 
 	/** Set of RW transactions that was active when this snapshot
-	was taken */
+	was taken
+	 生成ReadView时，系统中活跃的读写事务
+	 */
 	ids_t		m_ids;
 
 	/** The view does not need to see the undo logs for transactions
 	whose transaction number is strictly smaller (<) than this value:
-	they can be removed in purge if not needed by other views */
+	they can be removed in purge if not needed by other views
+	 小于m_low_limit_no的undo log是当前ReadView不需要的，如果所有ReadView都需要，则可能把这些undo log给删除掉
+	 */
 	trx_id_t	m_low_limit_no;
 
 	/** AC-NL-RO transaction view that has been "closed". */

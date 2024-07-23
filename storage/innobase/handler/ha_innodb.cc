@@ -5959,7 +5959,7 @@ ha_innobase::open(
 	ib_table = thd_to_innodb_session(thd)->lookup_table_handler(norm_name);
 
 	if (ib_table == NULL) {
-
+                // 执行SQL时，根据表名找到dict_table_t对象
 		ib_table = open_dict_table(name, norm_name, is_part,
 					   ignore_err);
 	} else {
@@ -8777,6 +8777,8 @@ ha_innobase::index_read(
 		dtuple_set_n_fields(m_prebuilt->search_tuple, 0);
 	}
 
+        // 将mysql定义的find_flag转成innodb的search_mode
+        // 所谓search_mode就是等于、大于、小于、大于等于这些,
 	page_cur_mode_t	mode = convert_search_mode_to_innobase(find_flag);
 
 	ulint	match_mode = 0;
@@ -8808,13 +8810,17 @@ ha_innobase::index_read(
 					DB_FORCED_ABORT, 0, m_user_thd));
 			}
 
+                        // 当前sql是不是insert .... select
 			m_prebuilt->ins_sel_stmt = thd_is_ins_sel_stmt(
 				m_user_thd);
 
+                        // mode表示查询方式，大于、小于、等于、like、in等等
 			ret = row_search_mvcc(
 				buf, mode, m_prebuilt, match_mode, 0);
 
 		} else {
+                        // 内部表不用走mvcc
+
 			m_prebuilt->session = thd_to_innodb_session(m_user_thd);
 
 			ret = row_search_no_mvcc(

@@ -330,7 +330,7 @@ rec_get_next_offs(
 #if REC_NEXT_SHIFT
 # error "REC_NEXT_SHIFT != 0"
 #endif
-
+        // rec指向的是行记录的中间位置
 	field_value = mach_read_from_2(rec - REC_NEXT);
 
 	if (comp) {

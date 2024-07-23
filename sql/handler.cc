@@ -7463,6 +7463,8 @@ int handler::read_range_next()
   if (result)
     DBUG_RETURN(result);
 
+  // 当根据索引key在索引上进行范围查找时
+  // 比较查到的key是否小于等于范围的end值，如果超过了则表示已经查到了所有数据了
   if (compare_key(end_range) <= 0)
   {
     DBUG_RETURN(0);

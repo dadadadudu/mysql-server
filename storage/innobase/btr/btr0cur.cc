@@ -2212,7 +2212,7 @@ btr_cur_open_at_index_side_func(
 				/* BTR_SEARCH_TREE is intended to be used with
 				BTR_ALREADY_S_LATCHED */
 				ut_ad(latch_mode != BTR_SEARCH_TREE);
-
+                                // 给当前索引加了S锁
 				mtr_s_lock(dict_index_get_lock(index), mtr);
 			}
 			upper_rw_latch = RW_S_LATCH;
@@ -2251,10 +2251,13 @@ btr_cur_open_at_index_side_func(
 		}
 
 		tree_savepoints[n_blocks] = mtr_set_savepoint(mtr);
-		block = buf_page_get_gen(page_id, page_size, rw_latch, NULL,
+
+                // 根据page_id尝试从buffer中获取对应的buf_block_t
+                block = buf_page_get_gen(page_id, page_size, rw_latch, NULL,
 					 BUF_GET, file, line, mtr);
 		tree_blocks[n_blocks] = block;
 
+                // 获取page的真正内容
 		page = buf_block_get_frame(block);
 
 		if (height == ULINT_UNDEFINED
@@ -2363,9 +2366,10 @@ btr_cur_open_at_index_side_func(
 				}
 			}
 		}
-
+                // 开始遍历
 		if (from_left) {
-			page_cur_set_before_first(block, page_cursor);
+			// page_cursor指向block对应page中的最小记录页
+                        page_cur_set_before_first(block, page_cursor);
 		} else {
 			page_cur_set_after_last(block, page_cursor);
 		}

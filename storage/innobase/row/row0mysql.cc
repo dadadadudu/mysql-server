@@ -860,7 +860,7 @@ row_create_prebuilt(
 
 	search_tuple_n_fields = 2 * (dict_table_get_n_cols(table)
 				     + dict_table_get_n_v_cols(table));
-
+        // 获取表的聚集索引
 	clust_index = dict_table_get_first_index(table);
 
 	/* Make sure that search_tuple is long enough for clustered index */

@@ -454,19 +454,25 @@ ReadView::prepare(trx_id_t id)
 {
 	ut_ad(mutex_own(&trx_sys->mutex));
 
+        // 记录创建事务id
 	m_creator_trx_id = id;
 
+        // max_trx_id表示当前事务系统系统开启下一个事务的事务id，现有事务的事务id都小于max_trx_id
+        // 因此，如果在版本链上查询时，发现undo log的事务id大于等于m_low_limit_id，则不用关系，因为这些undo log是本事务之后的事务创建的
+        // 本事务只关心小于m_low_limit_id的undo log
+        // 如果undo log的事务id小于m_low_limit_id，还需要判断该事务是不是活跃，活跃的表示是还没有提交的事务，不活跃的则表示是已经提交的事务
 	m_low_limit_no = m_low_limit_id = trx_sys->max_trx_id;
-        // 赋值当前系统中的所有事务id
+
+        // 把当前系统中的所有活跃的读写事务id复制给ReadView中的m_id属性
 	if (!trx_sys->rw_trx_ids.empty()) {
 		copy_trx_ids(trx_sys->rw_trx_ids);
 	} else {
 		m_ids.clear();
 	}
-        // 系统中被激活事务数量大于0
+        // 系统中活跃的读写事务数量大于0
 	if (UT_LIST_GET_LEN(trx_sys->serialisation_list) > 0) {
 		const trx_t*	trx;
-                // 获取链表中第一个被激活事务，serialisation_list是按trx::no属性排序的，升序排序，所以第一个就是no最小的事务
+                // 获取链表中第一个活跃的读写事务no，serialisation_list是按trx::no属性排序的，升序排序，所以第一个就是no最小的事务
 		trx = UT_LIST_GET_FIRST(trx_sys->serialisation_list);
                 // 记录最小的事务no
 		if (trx->no < m_low_limit_no) {
@@ -482,6 +488,7 @@ void
 ReadView::complete()
 {
 	/* The first active transaction has the smallest id. */
+        // m_ids中最小的事务id
 	m_up_limit_id = !m_ids.empty() ? m_ids.front() : m_low_limit_id;
 
 	ut_ad(m_up_limit_id <= m_low_limit_id);
@@ -596,8 +603,11 @@ MVCC::view_open(ReadView*& view, trx_t* trx)
 
 	if (view != NULL) {
 
+                // 初始化m_creator_trx_id、m_low_limit_id、m_low_limit_no、m_ids
+                // m_low_limit_id表示下一个事务的id
 		view->prepare(trx->id);
 
+                // 初始化m_up_limit_id，为m_ids中最小的事务id
 		view->complete();
                 // 把view添加到m_views链表中
 		UT_LIST_ADD_FIRST(m_views, view);

@@ -1703,7 +1703,7 @@ private:
 	ulint					n_ref_count;
 
 public:
-	/** List of locks on the table. Protected by lock_sys->mutex. */
+	/** List of locks on the table. Protected by lock_sys->mutex. 加表锁时会添加到这个list中，加行锁时不会*/
 	table_lock_list_t			locks;
 
 	/** Timestamp of the last modification of this table. */

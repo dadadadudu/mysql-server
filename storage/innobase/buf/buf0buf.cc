@@ -4245,7 +4245,7 @@ got_block:
 			return(NULL);
 		}
 	}
-
+        // fix_block对应的就是page
 	switch (buf_block_get_state(fix_block)) {
 		buf_page_t*	bpage;
 

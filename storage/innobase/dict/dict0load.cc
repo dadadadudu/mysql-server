@@ -3139,7 +3139,7 @@ err_exit:
 
 	btr_pcur_close(&pcur);
 	mtr_commit(&mtr);
-
+        // 加载对应的表空间，也就是获取fil_space_t对象
 	dict_load_tablespace(table, heap, ignore_err);
 
         // 从SYS_COLUMNS找到表的字段信息，设置到dict_table_t对象中
