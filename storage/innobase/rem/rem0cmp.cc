@@ -832,7 +832,7 @@ cmp_dtuple_rec_with_match_bytes(
 
 	/* Match fields in a loop; stop if we run out of fields in dtuple
 	or find an externally stored field */
-
+        // 索引字段会存在最前面，这样就只需要指定比较前几个字段就可以了，比如主键，就比较前1个字段，比如3个联合索引，就比较前3个字段
 	while (cur_field < n_cmp) {
 		const dfield_t*	dfield		= dtuple_get_nth_field(
 			dtuple, cur_field);

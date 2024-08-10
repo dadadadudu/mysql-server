@@ -370,15 +370,20 @@ dict_build_table_def_step(
 	table = node->table;
 
 	trx_t*	trx = thr_get_trx(thr);
+
+        // 给dict_table_t对象分配一个table_id
 	dict_table_assign_new_id(table, trx);
 
+        // 创建并初始化ibd文件
 	err = dict_build_tablespace_for_table(table);
 	if (err != DB_SUCCESS) {
 		return(err);
 	}
 
-	row = dict_create_sys_tables_tuple(table, node->heap);
+        // 复制dict_table_t对象为row对象
+        row = dict_create_sys_tables_tuple(table, node->heap);
 
+        //将row对象中的内容存一份到dict_sys->sys_tables中
 	ins_node_set_new_row(node->tab_def, row);
 
 	return(err);
@@ -534,7 +539,7 @@ dict_build_tablespace_for_table(
 		- page 2 is the first inode page,
 		- page 3 will contain the root of the clustered index of
 		the table we create here. */
-
+                // 创建ibd文件
 		err = fil_ibd_create(
 			space, table->name.m_name, filepath, fsp_flags,
 			FIL_IBD_FILE_INITIAL_SIZE);
@@ -877,6 +882,7 @@ dict_build_index_def_step(
 
 	index = node->index;
 
+        // 获取dict_table_t对象
 	table = dict_table_get_low(index->table_name);
 
 	if (table == NULL) {
@@ -893,6 +899,7 @@ dict_build_index_def_step(
 	ut_ad((UT_LIST_GET_LEN(table->indexes) > 0)
 	      || dict_index_is_clust(index));
 
+        // 获取新的index_id
 	dict_hdr_get_new_id(NULL, &index->id, NULL, table, false);
 
 	/* Inherit the space id from the table; we store all indexes of a
@@ -900,9 +907,11 @@ dict_build_index_def_step(
 
 	index->space = table->space;
 	node->page_no = FIL_NULL;
+        // 将dict_index_t对象复制为row对象
 	row = dict_create_sys_indexes_tuple(index, node->heap);
 	node->ind_row = row;
 
+        // 将row对象插入到sys_indexes中
 	ins_node_set_new_row(node->ind_def, row);
 
 	/* Note that the index was created by this transaction. */
@@ -1013,7 +1022,7 @@ dict_create_index_tree_step(
 	}
 
 	search_tuple = dict_create_search_tuple(node->ind_row, node->heap);
-
+        //
 	btr_pcur_open(UT_LIST_GET_FIRST(sys_indexes->indexes),
 		      search_tuple, PAGE_CUR_L, BTR_MODIFY_LEAF,
 		      &pcur, &mtr);
@@ -1026,6 +1035,7 @@ dict_create_index_tree_step(
 	if (missing) {
 		node->page_no = FIL_NULL;
 	} else {
+                // 创建B+树，返回B+树根页对应的页号
 		node->page_no = btr_create(
 			index->type, index->space,
 			dict_table_page_size(index->table),
@@ -1408,6 +1418,7 @@ ind_create_graph_create(
 	node = static_cast<ind_node_t*>(
 		mem_heap_alloc(heap, sizeof(ind_node_t)));
 
+        // 对应执行dict_create_index_step()方法，这个node下有两个字节点，所以dict_create_index_step()会被执行两次
 	node->common.type = QUE_NODE_CREATE_INDEX;
 
 	node->index = index;
@@ -1418,10 +1429,12 @@ ind_create_graph_create(
 	node->page_no = FIL_NULL;
 	node->heap = mem_heap_create(256);
 
+        // 一次用来把dict_index_t对象插入到sys_indexes中
 	node->ind_def = ins_node_create(INS_DIRECT,
 					dict_sys->sys_indexes, heap);
 	node->ind_def->common.parent = node;
 
+        // 一次用来把dict_filed_t对象插入到sys_fields中
 	node->field_def = ins_node_create(INS_DIRECT,
 					  dict_sys->sys_fields, heap);
 	node->field_def->common.parent = node;
@@ -1590,7 +1603,9 @@ dict_create_index_step(
 	}
 
 	if (node->state == INDEX_BUILD_INDEX_DEF) {
-		/* DO THE CHECKS OF THE CONSISTENCY CONSTRAINTS HERE */
+
+                /* DO THE CHECKS OF THE CONSISTENCY CONSTRAINTS HERE */
+                // 创建索引
 		err = dict_build_index_def_step(thr, node);
 
 		if (err != DB_SUCCESS) {
@@ -1642,7 +1657,7 @@ dict_create_index_step(
 	}
 
 	if (node->state == INDEX_CREATE_INDEX_TREE) {
-
+                // 创建索引B+树
 		err = dict_create_index_tree_step(node);
 
 		DBUG_EXECUTE_IF("ib_dict_create_index_tree_fail",

@@ -596,8 +596,11 @@ MVCC::view_open(ReadView*& view, trx_t* trx)
 		UT_LIST_REMOVE(m_views, view);
 
 	} else {
-		mutex_enter(&trx_sys->mutex); // 创建ReadView要加锁，因为需要把系统中当前被激活的所有事务的no复制到ReadView中
 
+                // 创建ReadView要加锁，因为需要把系统中当前被激活的所有事务的no复制到ReadView中
+		mutex_enter(&trx_sys->mutex);
+
+                // 会从空闲ReadView链表中获取一个空间的ReadView对象，没有空闲的就会构建一个空的ReadView对象
 		view = get_view();
 	}
 

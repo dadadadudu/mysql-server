@@ -3096,7 +3096,7 @@ err_exit:
 
 	ut_a(thr == que_fork_start_command(
 			static_cast<que_fork_t*>(que_node_get_parent(thr))));
-
+        // 这个方法中会调用到fil0fil.cc中的fil_assign_new_space_id()方法，从而
 	que_run_threads(thr);
 
 	err = trx->error_state;
@@ -3109,7 +3109,7 @@ err_exit:
 
 		char*	path;
 		path = fil_space_get_first_path(table->space);
-
+                // 将表空间信息，比如space_id、表名、文件路径存到SYS_TABLESPACES、SYS_DATAFILES中
 		err = dict_replace_tablespace_in_dictionary(
 			table->space, table->name.m_name,
 			fil_space_get_flags(table->space),
@@ -3264,6 +3264,7 @@ row_create_index_for_mysql(
 		ut_ad(rw_lock_own(dict_operation_lock, RW_LOCK_X));
 		ut_ad(mutex_own(&dict_sys->mutex));
 
+                // 获取dict_table_t对象
 		table = dict_table_open_on_name(table_name, TRUE, TRUE,
 						DICT_ERR_IGNORE_NONE);
 
@@ -3312,6 +3313,7 @@ row_create_index_for_mysql(
 
 		heap = mem_heap_create(512);
 
+                // 一个node相当于定义了多个操作
 		node = ind_create_graph_create(index, heap, NULL);
 
 		thr = pars_complete_graph_for_exec(node, trx, heap, NULL);
@@ -3319,7 +3321,7 @@ row_create_index_for_mysql(
 		ut_a(thr == que_fork_start_command(
 				static_cast<que_fork_t*>(
 					que_node_get_parent(thr))));
-
+                // 执行nodel中定义的操作
 		que_run_threads(thr);
 
 		err = trx->error_state;

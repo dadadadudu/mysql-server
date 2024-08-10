@@ -1196,6 +1196,8 @@ page_get_max_insert_size(
 	ulint	free_space;
 
 	if (page_is_comp(page)) {
+                // page_header_get_field(page, PAGE_HEAP_TOP) - PAGE_NEW_SUPREMUM_END表示该页新增记录占用了多少空间
+                // page_dir_calc_reserved_space()表示新增记录占用了多个slot空间
 		occupied = page_header_get_field(page, PAGE_HEAP_TOP)
 			- PAGE_NEW_SUPREMUM_END
 			+ page_dir_calc_reserved_space(

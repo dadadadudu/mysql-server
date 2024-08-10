@@ -3185,7 +3185,7 @@ row_sel_store_mysql_field_func(
 		}
 	} else {
 		/* Field is stored in the row. */
-
+                // 从当前记录rec中取出对应field_no的值，rec可能是索引中的一条记录
 		data = rec_get_nth_field(rec, offsets, field_no, &len);
 
 		if (len == UNIV_SQL_NULL) {
@@ -4151,7 +4151,7 @@ row_search_idx_cond_check(
 		if (templ->is_virtual) {
 			continue;
 		}
-
+                // icp_rec_field_no表示字段在索引上的序号，比如id字段在bcd联合索引上的序号为3
 		if (!row_sel_store_mysql_field(mysql_rec, prebuilt,
 					       rec, prebuilt->index, offsets,
 					       templ->icp_rec_field_no,
@@ -4166,6 +4166,7 @@ row_search_idx_cond_check(
 	index, if the case of the column has been updated in
 	the past, or a record has been deleted and a record
 	inserted in a different case. */
+        // 索引条件比较
 	result = innobase_index_cond(prebuilt->idx_cond);
 	switch (result) {
 	case ICP_MATCH:
@@ -4814,6 +4815,7 @@ row_search_mvcc(
 			prebuilt->fetch_direction = direction;
 		}
 
+                //
 		if (UNIV_UNLIKELY(direction != prebuilt->fetch_direction)) {
 			if (UNIV_UNLIKELY(prebuilt->n_fetch_cached > 0)) {
 				ut_error;
@@ -4866,12 +4868,15 @@ row_search_mvcc(
 	/* In a search where at most one record in the index may match, we
 	can use a LOCK_REC_NOT_GAP type record lock when locking a
 	non-delete-marked matching record.
+        如果一个搜索只能从索引中找到一行记录，那就给这行记录加LOCK_REC_NOT_GAP行锁
 
 	Note that in a unique secondary index there may be different
 	delete-marked versions of a record where only the primary key
 	values differ: thus in a secondary index we must use next-key
 	locks when locking delete-marked records. */
 
+        // 如果是在唯一索引上进行精确匹配，搜索字段个数等于索引字段个数并且搜索字段中不包含null值，也就是SQL语句的搜索条件提供了索引的全部字段
+        // search_tuple中只会包含索引字段对应的搜索条件
 	if (match_mode == ROW_SEL_EXACT
 	    && dict_index_is_unique(index)
 	    && dtuple_get_n_fields(search_tuple)
@@ -4884,7 +4889,16 @@ row_search_mvcc(
 		null. A clustered index under MySQL can never contain null
 		columns because we demand that all the columns in primary key
 		are non-null. */
+                // 假如是联合主键的唯一索引，也可能包含重复值，因为某个字段可能是空值
+                // 比如alter table user_info add unique index idx_name(first_name, last_name);
+                // insert into user_info values(1, 'zhouyu1', null, '13817788888');   # heap_no = 2
+                // insert into user_info values(2, 'zhouyu1', null, '13817788888');   # heap_no = 4
+                // insert into user_info values(3, 'zhouyu1', 'dadudu', '13817788888');   # heap_no = 5
+                // insert into user_info values(4, 'zhouyu1', 'dadudu', '13817788888');   # 插不进去 heap_no = 6
+                // insert into user_info values(10, 'zhouyu10', null, '13817788888'); # heap_no = 3
+                // 聚集索引不会包含null字段，因为主键字段不能为null
 
+                // 符合条件就是唯一搜索，确保只会搜出一条记录，并不是唯一索引就只会搜出一条，得看搜索条件是不是某个条件为null，如果为null是有可能搜出多条的
 		unique_search = TRUE;
 
 		/* Even if the condition is unique, MySQL seems to try to
@@ -4919,6 +4933,7 @@ row_search_mvcc(
 	cannot use the adaptive hash index in a search in the case the row
 	may be long and there may be externally stored fields */
 
+        // 最后一个条件!prebuilt->innodb_api)一般不会满足
 	if (UNIV_UNLIKELY(direction == 0)
 	    && unique_search
 	    && btr_search_enabled
@@ -5058,7 +5073,7 @@ row_search_mvcc(
 	      || srv_read_only_mode);
 
 	trx_start_if_not_started(trx, false);
-
+        // 如果隔离级别是读未提交或读已提交，不用加gap锁
 	if (trx->isolation_level <= TRX_ISO_READ_COMMITTED
 	    && prebuilt->select_lock_type != LOCK_NONE
 	    && trx->mysql_thd != NULL
@@ -5072,7 +5087,7 @@ row_search_mvcc(
 	/* Note that if the search mode was GE or G, then the cursor
 	naturally moves upward (in fetch next) in alphabetical order,
 	otherwise downward */
-
+        // order by id desc时，direction为2，表示按降序方向移动
 	if (direction == 0) {
 
 		if (mode == PAGE_CUR_GE
@@ -5090,6 +5105,7 @@ row_search_mvcc(
 	thr = que_fork_get_first_thr(prebuilt->sel_graph);
         // 将事务状态改为QUE_THR_RUNNING，并对事务中的n_active_thrs加1
 	que_thr_move_to_run_state_for_mysql(thr, trx);
+
         // 获取表的第一个索引，一定是聚集索引
 	clust_index = dict_table_get_first_index(index->table);
 
@@ -5114,12 +5130,15 @@ row_search_mvcc(
 		/* Assign a read view for the query */
                 // LOCK_NONE表示当前SQL执行不需要加锁，只需要保证一致性读就行了，比如最普通的select查询，生成read_view
 		if (!srv_read_only_mode) {
+                        // 一致性读，需要分配一个ReadView
 			trx_assign_read_view(trx);
 		}
 
 		prebuilt->sql_stat_start = FALSE;
 	} else {
 wait_table_again:
+
+                // 加锁读，先加意向表锁
                 // 加表锁，要么是LOCK_IS，要么是LOCK_IX
 		err = lock_table(0, index->table,
 				 prebuilt->select_lock_type == LOCK_S
@@ -5199,14 +5218,23 @@ wait_table_again:
 			}
 		}
 
+                // select * from user_info where id = 5; mode为PAGE_CUR_GE
+                // select * from user_info where id > 5; mode为PAGE_CUR_G
+                // select * from user_info where id >= 5; mode为PAGE_CUR_G
+                // select * from user_info where id < 3 order by id desc; mode为mode为PAGE_CUR_L
+                // select * from user_info where id <= 3 order by id desc; mode为mode为PAGE_CUR_LE
+
+
+                // 遍历B+树，根据search_tuple中指定的查询字段和值，根据mode找到第一个符合条件的记录
 		btr_pcur_open_with_no_init(index, search_tuple, mode,
 					   BTR_SEARCH_LEAF,
 					   pcur, 0, &mtr);
 
 		pcur->trx_if_known = trx;
 
+                // 根据指针获取对应的record，pcur指向的是rec的中间，所以只需要通过rec[2]就能得到表的主键字段（不是row_id）
 		rec = btr_pcur_get_rec(pcur);
-
+                // moves_up为false，表示向左移动，此时如果要加锁，
 		if (!moves_up
 		    && !page_rec_is_supremum(rec)
 		    && set_also_gap_locks
@@ -5214,6 +5242,8 @@ wait_table_again:
 			 || trx->isolation_level <= TRX_ISO_READ_COMMITTED)
 		    && prebuilt->select_lock_type != LOCK_NONE
 		    && !dict_index_is_spatial(index)) {
+                        // select * from user_info where id < 3 order by id desc for update
+                        // 对于以上查询，会先找到id=2的记录，然后取它的下一条记录，也就是id=3，然后给id=3的记录加GAP锁，锁住id=3之前的间隙
 
 			/* Try to place a gap lock on the next index record
 			to prevent phantoms in ORDER BY ... DESC queries */
@@ -5236,7 +5266,11 @@ wait_table_again:
 			}
 		}
 	} else if (mode == PAGE_CUR_G || mode == PAGE_CUR_L) {
-		btr_pcur_open_at_index_side(
+                // select * from user_info; mode为PAGE_CUR_G
+                // select * from user_info order by id desc; mode为PAGE_CUR_L
+
+		// 注意第一个参数，为PAGE_CUR_G表示定位在index的最左边记录，否则定位在index的最右边记录
+                btr_pcur_open_at_index_side(
 			mode == PAGE_CUR_G, index, BTR_SEARCH_LEAF,
 			pcur, false, 0, &mtr);
 	}
@@ -5253,7 +5287,7 @@ rec_loop:
 
 	/*-------------------------------------------------------------*/
 	/* PHASE 4: Look for matching records in a loop */
-        // 获取pcur指向的记录，比如一开始指向的是page中的最小记录
+        // 获取pcur指向的记录，执行符合查询条件的第一条记录
 	rec = btr_pcur_get_rec(pcur);
 
 	ut_ad(!!page_rec_is_comp(rec) == comp);
@@ -5368,7 +5402,8 @@ rec_loop:
 	corruption */
 
 	if (comp) {
-		next_offs = rec_get_next_offs(rec, TRUE);
+		// 找到一行记录后，先记录一下下一行的偏移位置
+                next_offs = rec_get_next_offs(rec, TRUE);
 		if (UNIV_UNLIKELY(next_offs < PAGE_NEW_SUPREMUM)) {
 
 			goto wrong_offs;
@@ -5430,6 +5465,7 @@ wrong_offs:
 	ut_ad(fil_page_index_page_check(btr_pcur_get_page(pcur)));
 	ut_ad(btr_page_get_index_id(btr_pcur_get_page(pcur)) == index->id);
 
+        // 获取当前记录的偏移
 	offsets = rec_get_offsets(rec, index, offsets, ULINT_UNDEFINED, &heap);
 
 	if (UNIV_UNLIKELY(srv_force_recovery > 0)) {
@@ -5711,6 +5747,7 @@ no_gap_lock:
 			high force recovery level set, we try to avoid crashes
 			by skipping this lookup */
 
+                        // 找到了符合搜索条件的记录，判断当前版本是不是当前ReadView可见，如果不可见则从版本链上取上一个版本
 			if (srv_force_recovery < 5
 			    && !lock_clust_rec_cons_read_sees(
 				    rec, index, offsets,
@@ -5784,7 +5821,7 @@ locks_ok:
 	index record built for a consistent read. We cannot assume after this
 	point that rec is on a buffer pool page. Functions like
 	page_rec_is_comp() cannot be used! */
-
+        // 判断找到的记录是不是被删除了
 	if (rec_get_deleted_flag(rec, comp)) {
 
 		/* The record is delete-marked: we can skip it */
@@ -5840,7 +5877,7 @@ locks_ok:
 
 	/* Get the clustered index record if needed, if we did not do the
 	search using the clustered index. */
-
+        // need_to_access_clustered表示需不需要访问聚集索引，也就是需不需要回表，1表示需要回表，0表示不需要回表
 	if (index != clust_index && prebuilt->need_to_access_clustered) {
 
 requires_clust_rec:
@@ -5860,7 +5897,7 @@ requires_clust_rec:
 		/* The following call returns 'offsets' associated with
 		'clust_rec'. Note that 'clust_rec' can be an old version
 		built for a consistent read. */
-
+                // 从聚集索引上找到对应记录，回表
 		err = row_sel_get_clust_rec_for_mysql(prebuilt, index, rec,
 						      thr, &clust_rec,
 						      &offsets, &heap,
@@ -6238,6 +6275,7 @@ next_rec:
 			move = rtr_pcur_move_to_next(
 				search_tuple, mode, pcur, 0, &mtr);
 		} else {
+                        // 移动到下一条记录，会修改pcur
 			move = btr_pcur_move_to_next(pcur, &mtr);
 		}
 

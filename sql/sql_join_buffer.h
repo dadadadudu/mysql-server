@@ -433,6 +433,7 @@ public:
   virtual enum_nested_loop_state put_record()
   {
     if (put_record_in_cache())
+      // 如果join buffer满了，则会直接执行join_records，相当于会对被驱动表直接做一次全表扫描
       return join_records(false);
     return NESTED_LOOP_OK;
   }

@@ -3646,7 +3646,7 @@ row_ins_alloc_row_id_step(
 	}
 
 	/* Fill in row id value to row */
-
+        // 从系统字典申请一个新的row_id
 	row_id = dict_sys_get_new_row_id();
         // 把row_id存到ins_node中
 	dict_sys_write_row_id(node->row_id_buf, row_id);
@@ -3738,7 +3738,7 @@ row_ins(
 		row_ins_alloc_row_id_step(node);
                 // 新增记录可能需要插入到多个索引中，此处先找出表的第一个索引
 		node->index = dict_table_get_first_index(node->table);
-                // 找出需要插到第一个第一个索引中对应的第一个entry
+                // 找出需要插到第一个索引中对应的第一个entry，可能是批量插入，这里先插入第一条
 		node->entry = UT_LIST_GET_FIRST(node->entry_list);
 
 		if (node->ins_type == INS_SEARCHED) {

@@ -1009,6 +1009,8 @@ static ha_rows find_all_keys(Sort_param *param, QEP_TAB *qep_tab,
     }
     if (error == 0)
       param->examined_rows++;
+
+    // 这里会进行where条件的过滤
     if (!error && !qep_tab->skip_record(thd, &skip_record) && !skip_record)
     {
       ++(*found_rows);

@@ -7345,6 +7345,7 @@ ha_innobase::build_template(
 						false);
 				}
 
+                                // 判断当前字段是不是当前SQL需要的
 				field = build_template_needs_field(
 					contain,
 					m_prebuilt->read_just_key,
@@ -8773,16 +8774,21 @@ ha_innobase::index_read(
 	} else {
 		/* We position the cursor to the last or the first entry
 		in the index */
-
+                // 设置search_tuple的n_fields和n_fields_cmp为0，表示在索引上扫描时没有比较条件
 		dtuple_set_n_fields(m_prebuilt->search_tuple, 0);
 	}
 
-        // 将mysql定义的find_flag转成innodb的search_mode
-        // 所谓search_mode就是等于、大于、小于、大于等于这些,
+        // 将mysql定义的find_flag转成innodb的mode
+        // mode表示寻找page的模式，对于B+树索引，
+        // 只有:
+        // 大于、大于等于: SELECT * FROM user_info_gap WHERE id < 20 ORDER BY ID ASC;  id<=20就是GE
+        // 小于、小于等于: SELECT * FROM user_info_gap WHERE id < 20 ORDER BY ID DESC; id<=20就是LE
+        // 一般情况下都是GE，当走索引的范围查询，DESC排序时就会出现L或LE
 	page_cur_mode_t	mode = convert_search_mode_to_innobase(find_flag);
 
 	ulint	match_mode = 0;
 
+        // 只要查询走了索引，也就是要么查出一条记录，要么没有记录，此时match_mode为ROW_SEL_EXACT
 	if (find_flag == HA_READ_KEY_EXACT) {
 
 		match_mode = ROW_SEL_EXACT;
@@ -9960,7 +9966,7 @@ innodb_base_col_setup_for_stored(
 @return ER_* level error */
 inline MY_ATTRIBUTE((warn_unused_result))
 int
-create_table_info_t::create_table_def()
+create_table_info_t::                             create_table_def()
 {
 	dict_table_t*	table;
 	ulint		n_cols;
@@ -10047,6 +10053,7 @@ create_table_info_t::create_table_def()
 		actual_n_cols += 1;
 	}
 
+        // 创建dict_table_t对象
 	table = dict_mem_table_create(m_table_name, space_id,
 				      actual_n_cols, num_v, m_flags, m_flags2);
 
@@ -10394,6 +10401,7 @@ err_col:
 		}
 
 		if (err == DB_SUCCESS) {
+
 			err = row_create_table_for_mysql(
 				table, algorithm, m_trx, false);
 		}
@@ -10526,7 +10534,7 @@ create_index(
 
 	/* We pass 0 as the space id, and determine at a lower level the space
 	id where to store the table */
-
+        // 创建dict_index_t对象
 	index = dict_mem_index_create(table_name, key->name, 0,
 				      ind_type, key->user_defined_key_parts);
 
@@ -10549,7 +10557,7 @@ create_index(
 		with normal tables. */
 		index->disable_ahi = true;
 	}
-
+        // 遍历主键字段，联合主键就有多个字段，每个字段对应一个dict_field_t对象
 	for (ulint i = 0; i < key->user_defined_key_parts; i++) {
 		KEY_PART_INFO*	key_part = key->key_part + i;
 		ulint		prefix_len;
@@ -10628,6 +10636,7 @@ create_index(
 	still do our own checking using field_lengths to be absolutely
 	sure we don't create too long indexes. */
 
+        // 核心是调用row_create_index_for_mysql()
 	error = convert_error_code_to_mysql(
 		row_create_index_for_mysql(index, trx, field_lengths, handler),
 		flags, NULL);
@@ -11949,13 +11958,14 @@ create_table_info_t::create_table()
 	DBUG_ENTER("create_table");
 
 	/* Look for a primary key */
+        // primary_key_no == 0 表示自定义了主键
 	primary_key_no = (m_form->s->primary_key != MAX_KEY ?
 			  (int) m_form->s->primary_key : -1);
 
 	/* Our function innobase_get_mysql_key_number_for_index assumes
 	the primary key is always number 0, if it exists */
 	ut_a(primary_key_no == -1 || primary_key_no == 0);
-
+        // 会创建ibd文件
 	error = create_table_def();
 	if (error) {
 		DBUG_RETURN(error);
@@ -11967,7 +11977,7 @@ create_table_info_t::create_table()
 		/* Create an index which is used as the clustered index;
 		order the rows by their row id which is internally generated
 		by InnoDB */
-
+                // 通过row_id来创建聚集索引
 		error = create_clustered_index_when_no_primary(
 			m_trx, m_flags, m_table_name);
 		if (error) {
@@ -12051,6 +12061,7 @@ create_table_info_t::create_table()
 
 		if (i != static_cast<uint>(primary_key_no)) {
 
+                        // 依次创建index
 			if ((error = create_index(m_trx, m_form, m_flags,
 						  m_table_name, i))) {
 				DBUG_RETURN(error);
@@ -12305,6 +12316,7 @@ ha_innobase::create(
 		row_mysql_lock_data_dictionary(trx);
 	}
 
+        // 这里会创建ibd文件
 	if ((error = info.create_table())) {
 		goto cleanup;
 	}

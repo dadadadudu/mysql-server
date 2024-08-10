@@ -542,6 +542,7 @@ page_cur_search_with_match(
 
 		}
 
+                // 比较tuple和mid_rec
 		cmp = cmp_dtuple_rec_with_match(
 			tuple, mid_rec, offsets, &cur_matched_fields);
 
@@ -586,6 +587,7 @@ up_slot_match:
 
 	while (page_rec_get_next_const(low_rec) != up_rec) {
 
+                // 从low_rec的下一条记录开始遍历
 		mid_rec = page_rec_get_next_const(low_rec);
 
 		cur_matched_fields = std::min(low_matched_fields,
@@ -604,9 +606,11 @@ up_slot_match:
 
 		}
 
+                // 比较tuple和mid_rec
 		cmp = cmp_dtuple_rec_with_match(
 			tuple, mid_rec, offsets, &cur_matched_fields);
 
+                // 如果tuple > mid_rec，下一次循环将继续取mid_rec的下一条记录
 		if (cmp > 0) {
 low_rec_match:
 			low_rec = mid_rec;
@@ -623,7 +627,8 @@ low_rec_match:
 			}
 #endif /* PAGE_CUR_LE_OR_EXTENDS */
 up_rec_match:
-			up_rec = mid_rec;
+			// 如果tuple < mid_rec，将退出循环
+                        up_rec = mid_rec;
 			up_matched_fields = cur_matched_fields;
 		} else if (mode == PAGE_CUR_G || mode == PAGE_CUR_LE
 #ifdef PAGE_CUR_LE_OR_EXTENDS
@@ -654,6 +659,8 @@ up_rec_match:
 		}
 	}
 
+        // 如果是要找大于或大于等于tuple的，返回tuple大于或等于的第一条记录，tuple a , r
+        // 否则返回tuple小于或等于的第一条记录
 	if (mode <= PAGE_CUR_GE) {
 		page_cur_position(up_rec, block, cursor);
 	} else {

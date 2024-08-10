@@ -1184,6 +1184,8 @@ buf_LRU_get_free_only(
 		ut_ad(!block->page.in_flush_list);
 		ut_ad(!block->page.in_LRU_list);
 		ut_a(!buf_page_in_file(&block->page));
+
+                // page从free链表中移除掉
 		UT_LIST_REMOVE(buf_pool->free, &block->page);
 
 		if (buf_pool->curr_size >= buf_pool->old_size
@@ -1215,6 +1217,7 @@ buf_LRU_get_free_only(
 			UT_LIST_GET_FIRST(buf_pool->free));
 	}
 
+        // 从free链表中返回一个空闲页block
 	return(block);
 }
 
@@ -1330,8 +1333,11 @@ loop:
 	buf_LRU_check_size_of_non_data_objects(buf_pool);
 
 	/* If there is a block in the free list, take it */
+        // 从free链表中获取一个空闲页block
 	block = buf_LRU_get_free_only(buf_pool);
 
+        // 如果从free链表中找到了空闲页，则直接返回该空闲页
+        // 如果free链表中没有空闲页，则从LRU链表中进行淘汰
 	if (block != NULL) {
 
 		buf_pool_mutex_exit(buf_pool);

@@ -1868,7 +1868,9 @@ fsp_page_create(
 	mtr_t*			mtr,
 	mtr_t*			init_mtr)
 {
-	buf_block_t*	block = buf_page_create(page_id, page_size, init_mtr);
+
+        // 在buffer_pool中初始化出来一个page
+        buf_block_t*	block = buf_page_create(page_id, page_size, init_mtr);
 
 	ut_ad(mtr_memo_contains(mtr, block, MTR_MEMO_PAGE_X_FIX)
 	      == rw_lock_own(&block->lock, RW_LOCK_X));
@@ -1905,6 +1907,7 @@ fsp_page_create(
 						    MTR_MEMO_PAGE_X_FIX
 						    | MTR_MEMO_PAGE_SX_FIX));
 
+                // 初始化空闲Page中的File Header
 		fsp_init_file_page(block, init_mtr);
 	}
 
@@ -2232,6 +2235,7 @@ fsp_seg_inode_page_find_free(
 		inode = fsp_seg_inode_page_get_nth_inode(
 			page, i, page_size, mtr);
 
+                // inode可用
 		if (!mach_read_from_8(inode + FSEG_ID)) {
 			/* This is unused */
 			return(i);
@@ -2266,6 +2270,7 @@ fsp_alloc_seg_inode_page(
 	const page_size_t	page_size(mach_read_from_4(FSP_SPACE_FLAGS
 							   + space_header));
 
+        // 生成一个新page，block表示对应page的控制块
 	block = fsp_alloc_free_page(space, page_size, 0, RW_SX_LATCH, mtr, mtr);
 
 	if (block == NULL) {
@@ -2276,11 +2281,13 @@ fsp_alloc_seg_inode_page(
 	buf_block_dbg_add_level(block, SYNC_FSP_PAGE);
 	ut_ad(rw_lock_get_sx_lock_count(&block->lock) == 1);
 
+        // frame表示具体的page区域
 	page = buf_block_get_frame(block);
 
 	mlog_write_ulint(page + FIL_PAGE_TYPE, FIL_PAGE_INODE,
 			 MLOG_2BYTES, mtr);
 
+        // 给这个page添加INODE对象，相当于初始化，值都为0
 	for (ulint i = 0; i < FSP_SEG_INODES_PER_PAGE(page_size); i++) {
 
 		inode = fsp_seg_inode_page_get_nth_inode(
@@ -2289,6 +2296,7 @@ fsp_alloc_seg_inode_page(
 		mlog_write_ull(inode + FSEG_ID, 0, mtr);
 	}
 
+        // 把这个page添加到SEG_INODES_FREE链表中去
 	flst_add_last(
 		space_header + FSP_SEG_INODES_FREE,
 		page + FSEG_INODE_PAGE_NODE, mtr);
@@ -2314,6 +2322,13 @@ fsp_alloc_seg_inode(
 	ut_ad(page_offset(space_header) == FSP_HEADER_OFFSET);
 
 	/* Allocate a new segment inode page if needed. */
+        // FSP_SEG_INODES_FREE = 32 + 4 * 16 = 96
+        // space_header + FSP_SEG_INODES_FREE = 38 + 96 = 134，正好是SEG_INODES_FREE链表的基节点
+        // 从基节点就能得出链表的长度，为0
+        // 每个段对应一个INODE，如果一个表的段特别多，就会有很多INODE，而这些INODE会存在专门存INODE对象的INODE页中，比如表空间的第3页（page_no为2），就是用来存INODE对象的
+        // 如果INODE对象特别多，就需要多个INODE页
+        // SEG_INODES_FREE链表中的INODE页表示有空闲空间
+        // 如果没有空闲空间，那就要新生成一个page用来存INODE，生成的新page会添加到SEG_INODES_FREE链表中
 	if (flst_get_len(space_header + FSP_SEG_INODES_FREE) == 0
 	    && !fsp_alloc_seg_inode_page(space_header, mtr)) {
 		return(NULL);
@@ -2322,22 +2337,28 @@ fsp_alloc_seg_inode(
 	const page_size_t	page_size(
 		mach_read_from_4(FSP_SPACE_FLAGS + space_header));
 
+        // 从SEG_INODES_FREE链表中获取空闲的INODE页
 	const page_id_t		page_id(
 		page_get_space_id(page_align(space_header)),
 		flst_get_first(space_header + FSP_SEG_INODES_FREE, mtr).page);
 
+        // 空闲INODE页的控制块
 	block = buf_page_get(page_id, page_size, RW_SX_LATCH, mtr);
 	buf_block_dbg_add_level(block, SYNC_FSP_PAGE);
 	fil_block_check_type(block, FIL_PAGE_INODE, mtr);
 
+        // 空闲INODE页本身
 	page = buf_block_get_frame(block);
 
+        // 从page中获取可用的inode的下标
 	n = fsp_seg_inode_page_find_free(page, 0, page_size, mtr);
 
 	ut_a(n != ULINT_UNDEFINED);
 
+        // 获取可用的inode对象
 	inode = fsp_seg_inode_page_get_nth_inode(page, n, page_size, mtr);
 
+        // 这个inode的下一个不可用，则表示当前inode是当前inode页中的最后一个空闲inode，用完之后该inode页就不是空闲页，就需要移动到SEG_INODES_FULL中去
 	if (ULINT_UNDEFINED == fsp_seg_inode_page_find_free(page, n + 1,
 							    page_size, mtr)) {
 		/* There are no other unused headers left on the page: move it
@@ -2350,6 +2371,7 @@ fsp_alloc_seg_inode(
 			      page + FSEG_INODE_PAGE_NODE, mtr);
 	}
 
+        // 返回空闲inode
 	ut_ad(!mach_read_from_8(inode + FSEG_ID)
 	      || mach_read_from_4(inode + FSEG_MAGIC_N) == FSEG_MAGIC_N_VALUE);
 	return(inode);
@@ -2625,10 +2647,14 @@ fseg_create_general(
 	fil_space_t*		space = mtr_x_lock_space(space_id, mtr);
 	const page_size_t	page_size(space->flags);
 
+        // page不等于0，表示不用申请新Page，直接根据页号获取对应的page，后面把新增的段的段头存放在此页，如果page=0表示要新建一页并把段头存在此页
 	if (page != 0) {
+
+                // 获取page中存放段头的区域的指针header
 		block = buf_page_get(page_id_t(space_id, page), page_size,
 				     RW_SX_LATCH, mtr);
 
+                // byte_offset传进来的是段头存放的位置，这里的header就是用来存放段头的
 		header = byte_offset + buf_block_get_frame(block);
 
 		const ulint	type = space_id == TRX_SYS_SPACE
@@ -2654,8 +2680,11 @@ fseg_create_general(
 		DBUG_RETURN(NULL);
 	}
 
+        // 获取表空间头
 	space_header = fsp_get_space_header(space_id, page_size, mtr);
 
+        // 从当前表空间中分配一个空闲的inode对象，一个inode对象对应一个段，inode对象中记录了该对段对应了哪些区和哪些碎片页
+        // 得到一个空闲的inode对象后，就需要向inode中写入信息了
 	inode = fsp_alloc_seg_inode(space_header, mtr);
 
 	if (inode == NULL) {
@@ -2665,12 +2694,14 @@ fseg_create_general(
 
 	/* Read the next segment id from space header and increment the
 	value in space header */
-
+        // 获取段id
 	seg_id = mach_read_from_8(space_header + FSP_SEG_ID);
-
+        // 段id自增，给下一个段用
 	mlog_write_ull(space_header + FSP_SEG_ID, seg_id + 1, mtr);
-
+        // 将段id写入inode
 	mlog_write_ull(inode + FSEG_ID, seg_id, mtr);
+
+        // 初始化inode的其他属性
 	mlog_write_ulint(inode + FSEG_NOT_FULL_N_USED, 0, MLOG_4BYTES, mtr);
 
 	flst_init(inode + FSEG_FREE, mtr);
@@ -2683,6 +2714,7 @@ fseg_create_general(
 		fseg_set_nth_frag_page_no(inode, i, FIL_NULL, mtr);
 	}
 
+        // 分配一个新page
 	if (page == 0) {
 		block = fseg_alloc_free_page_low(space, page_size,
 						 inode, 0, FSP_UP, RW_SX_LATCH,
@@ -2710,13 +2742,16 @@ fseg_create_general(
 				 FIL_PAGE_TYPE_SYS, MLOG_2BYTES, mtr);
 	}
 
+        // 写入段头的各个属性，段头其实指向的就是段对应的inode对象
+        // inode在INODE页中的偏移量，相当于第几个inode
 	mlog_write_ulint(header + FSEG_HDR_OFFSET,
 			 page_offset(inode), MLOG_2BYTES, mtr);
 
+        // inode在表空间的哪一页（INODE也，里面存的都是inode）
 	mlog_write_ulint(header + FSEG_HDR_PAGE_NO,
 			 page_get_page_no(page_align(inode)),
 			 MLOG_4BYTES, mtr);
-
+        // inode在哪个表空间
 	mlog_write_ulint(header + FSEG_HDR_SPACE, space_id, MLOG_4BYTES, mtr);
 
 funct_exit:

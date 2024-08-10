@@ -954,8 +954,10 @@ do_select(JOIN *join)
   {
     QEP_TAB *qep_tab= join->qep_tab + join->const_tables;
     assert(join->primary_tables);
+    // 0表示不是数据还没查完，end_of_records=0
     error= join->first_select(join,qep_tab,0);
     if (error >= NESTED_LOOP_OK)
+      // 1表示数据查完了，end_of_records=1
       error= join->first_select(join,qep_tab,1);
   }
 
@@ -1086,7 +1088,7 @@ sub_select_op(JOIN *join, QEP_TAB *qep_tab, bool end_of_records)
     enabled.
   */
   assert(!qep_tab->dynamic_range());
-
+  // 将结果存放到临时表中
   rc= op->put_record();
 
   DBUG_RETURN(rc);
@@ -1301,6 +1303,8 @@ sub_select(JOIN *join, QEP_TAB *const qep_tab,bool end_of_records)
     {
       if (qep_tab->keep_current_rowid)
         qep_tab->table()->file->position(qep_tab->table()->record[0]);
+
+      // 会对从innodb查出来的数据判断where条件是否满足
       rc= evaluate_join_record(join, qep_tab);
     }
   }
@@ -1496,6 +1500,7 @@ evaluate_join_record(JOIN *join, QEP_TAB *const qep_tab)
 
   if (condition)
   {
+    // 判断查出来的记录是否符合where条件
     found= MY_TEST(condition->val_int());
 
     if (join->thd->killed)
@@ -1649,6 +1654,7 @@ evaluate_join_record(JOIN *join, QEP_TAB *const qep_tab)
       // A match is found for the current partial join prefix.
       qep_tab->found_match= true;
 
+      // next_select表示从InnoDB中获取到数据后之后的处理，比如group by时，把group by对应的字段值插入到临时表中
       rc= (*qep_tab->next_select)(join, qep_tab+1, 0);
       join->thd->get_stmt_da()->inc_current_row_for_condition();
       if (rc != NESTED_LOOP_OK)
@@ -3023,6 +3029,7 @@ end_send_group(JOIN *join, QEP_TAB *qep_tab, bool end_of_records)
     join->set_items_ref_array(join->items3);
   }
 
+  // 调用test_if_item_cache_changed()来判断分组键的值是否发生了变化，如果发生了变化则把上一个分组字段和统计结果发送出去，如果没有发生变化则更新统计字段
   if (!join->first_record || end_of_records ||
       (idx=test_if_item_cache_changed(join->group_fields)) >= 0)
   {
@@ -3123,6 +3130,7 @@ end_send_group(JOIN *join, QEP_TAB *qep_tab, bool end_of_records)
       DBUG_RETURN(ok_code);
     }
   }
+  // 如果没有发生变化则更新统计字段
   if (update_sum_func(join->sum_funcs))
     DBUG_RETURN(NESTED_LOOP_ERROR);
   DBUG_RETURN(NESTED_LOOP_OK);
@@ -3388,7 +3396,7 @@ end_write(JOIN *join, QEP_TAB *const qep_tab, bool end_of_records)
 
       if (!check_unique_constraint(table))
         goto end; // skip it
-
+      // file可能是一个内存临时表，也可能是临时文件
       if ((error=table->file->ha_write_row(table->record[0])))
       {
         if (table->file->is_ignorable_error(error))

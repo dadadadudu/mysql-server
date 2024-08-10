@@ -2550,6 +2550,7 @@ bool create_ondisk_from_heap(THD *thd, TABLE *table,
   }
   else if (share.db_type() == innodb_hton)
   {
+    // 创建InnoDb临时表
     if (create_innodb_tmp_table(&new_table, table->s->key_info))
       goto err2;
   }
@@ -2592,6 +2593,7 @@ bool create_ondisk_from_heap(THD *thd, TABLE *table,
     is safe as this is a temporary on-disk table without timestamp/
     autoincrement or partitioning.
   */
+  // 将内存临时表中的数据写入到文件临时表中。
   while (!table->file->ha_rnd_next(new_table.record[1]))
   {
     write_err= new_table.file->ha_write_row(new_table.record[1]);

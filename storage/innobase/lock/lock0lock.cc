@@ -901,6 +901,7 @@ lock_has_to_wait(
 {
 	ut_ad(lock1 && lock2);
 
+        // 不同事务
 	if (lock1->trx != lock2->trx
 	    && !lock_mode_compatible(lock_get_mode(lock1),
 				     lock_get_mode(lock2))) {
@@ -917,6 +918,7 @@ lock_has_to_wait(
 					lock_get_prdt_from_lock(lock1),
 					lock2));
 			} else {
+                                // 这是重点
 				return(lock_rec_has_to_wait(
 					lock1->trx, lock1->type_mode, lock2,
 					lock_rec_get_nth_bit(lock1, true)));
@@ -2156,8 +2158,10 @@ lock_rec_has_to_wait_in_queue(
 	     lock != wait_lock;
 	     lock = lock_rec_get_next_on_page_const(lock)) {
 
+                // bit区域
 		const byte*	p = (const byte*) &lock[1];
 
+                // 锁了同一行的情况下才进行类型的pk，如果两个锁兼容，那么lock_has_to_wait()返回的是false，会和下一个锁进行PK
 		if (heap_no < lock_rec_get_n_bits(lock)
 		    && (p[bit_offset] & bit_mask)
 		    && lock_has_to_wait(wait_lock, lock)) {
@@ -2499,6 +2503,7 @@ lock_rec_grant(lock_t* in_lock)
 	locks if there are no conflicting locks ahead. Stop at the first
 	X lock that is waiting or has been granted. */
 
+        // 遍历page对应的其他所有lock_t，判断lock_t需不需要继续等待，而判断逻辑中又会依次和其他lock_t进行pk
 	for (lock = lock_rec_get_first_on_page_addr(lock_hash, space, page_no);
 	     lock != NULL;
 	     lock = lock_rec_get_next_on_page(lock)) {

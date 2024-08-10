@@ -833,7 +833,7 @@ row_merge_buf_add(
 	field = entry->fields;
 
 	/* Copy the data fields. */
-
+        // 把一行记录对应的索引key的每个field复制到buf中
 	do {
 		dfield_dup(field++, buf->heap);
 	} while (--n_fields);
@@ -1727,6 +1727,7 @@ row_merge_read_clustered_index(
 	/* There is no previous tuple yet. */
 	prev_mtuple.fields = NULL;
 
+        // 遍历每个索引，给每个索引分配一个merge_buf
 	for (ulint i = 0; i < n_index; i++) {
 		if (index[i]->type & DICT_FTS) {
 
@@ -1758,7 +1759,7 @@ row_merge_read_clustered_index(
 			if (dict_index_is_spatial(index[i])) {
 				num_spatial++;
 			}
-
+                        // 每个索引对应的一个merge_buf，用来排序的
 			merge_buf[i] = row_merge_buf_create(index[i]);
 		}
 	}
@@ -1790,9 +1791,9 @@ row_merge_read_clustered_index(
 
 	/* Find the clustered index and create a persistent cursor
 	based on that. */
-
+        // 获取表的聚集索引，后续要从表的聚集索引上读取数据
 	clust_index = dict_table_get_first_index(old_table);
-
+        // pcur指向聚集索引的最左的叶子节点，开始遍历所有数据
 	btr_pcur_open_at_index_side(
 		true, clust_index, BTR_SEARCH_LEAF, &pcur, true, 0, &mtr);
 
@@ -1847,19 +1848,24 @@ row_merge_read_clustered_index(
 	}
 
 	/* Scan the clustered index. */
+        // 扫描聚焦索引叶子节点所有数据
 	for (;;) {
 		const rec_t*	rec;
 		ulint*		offsets;
 		const dtuple_t*	row;
 		row_ext_t*	ext;
+
+                // cur表示当前记录
 		page_cur_t*	cur	= btr_pcur_get_page_cur(&pcur);
 
 		mem_heap_empty(row_heap);
 
+                // 第一条记录最小记录，所以直接移动一下
 		page_cur_move_to_next(cur);
 
 		stage->n_pk_recs_inc();
 
+                // 当前记录是不是最大记录
 		if (page_cur_is_after_last(cur)) {
 
 			stage->inc();
@@ -1962,9 +1968,11 @@ end_of_index:
 				ulint		next_page_no;
 				buf_block_t*	block;
 
+                                // 当遇到当前页的最大记录时，要判断还有没有下一页，如果没有就表示聚集索引所有记录都遍历完了，goto end_of_index
 				next_page_no = btr_page_get_next(
 					page_cur_get_page(cur), &mtr);
 
+                                // 表示聚集索引的最后一页
 				if (next_page_no == FIL_NULL) {
 					goto end_of_index;
 				}
@@ -1979,13 +1987,16 @@ end_of_index:
 
 				btr_leaf_page_release(page_cur_get_block(cur),
 						      BTR_SEARCH_LEAF, &mtr);
-				page_cur_set_before_first(block, cur);
+
+                                // 取一页的第一条记录，为最小记录，所以直接移动一下
+                                page_cur_set_before_first(block, cur);
 				page_cur_move_to_next(cur);
 
 				ut_ad(!page_cur_is_after_last(cur));
 			}
 		}
 
+                // 当前记录
 		rec = page_cur_get_rec(cur);
 
 		offsets = rec_get_offsets(rec, clust_index, NULL,
@@ -2012,7 +2023,7 @@ end_of_index:
 			the DML thread has updated the clustered index
 			but has not yet accessed secondary index. */
 			ut_ad(MVCC::is_view_active(trx->read_view));
-
+                        // 当前记录对当前事务是否可见
 			if (!trx->read_view->changes_visible(
 				    row_get_rec_trx_id(
 					    rec, clust_index, offsets),
@@ -2030,7 +2041,7 @@ end_of_index:
 					continue;
 				}
 			}
-
+                        // 当前记录是否被删除
 			if (rec_get_deleted_flag(
 				    rec,
 				    dict_table_is_comp(old_table))) {
@@ -2149,6 +2160,7 @@ write_buffers:
 			&& dict_index_is_clust(merge_buf[0]->index);
 
 		for (ulint i = 0; i < n_index; i++, skip_sort = false) {
+                        // 每个索引一个buf
 			row_merge_buf_t*	buf	= merge_buf[i];
 			merge_file_t*		file	= &files[i];
 			ulint			rows_added = 0;
@@ -2174,6 +2186,7 @@ write_buffers:
 				continue;
 			}
 
+                        // 把当前行对应的所有索引field添加到buf中，每个索引对应一个buf
 			if (UNIV_LIKELY
 			    (row && (rows_added = row_merge_buf_add(
 					buf, fts_index, old_table, new_table,
@@ -2374,6 +2387,7 @@ write_buffers:
 					row_merge_dup_t	dup = {
 						buf->index, table, col_map, 0};
 
+                                        // 对buf中的内容进行排序，没添加一条数据到buf中就会进行排序
 					row_merge_buf_sort(buf, &dup);
 
 					if (dup.n_dup) {
@@ -2420,6 +2434,8 @@ write_buffers:
 				temporary file. */
 				if (row == NULL && file->fd == -1
 				    && !clust_temp_file) {
+                                        // buf存了所有数据，直接把buf插入到新索引中
+
 					DBUG_EXECUTE_IF(
 						"row_merge_write_failure",
 						err = DB_TEMP_FILE_WRITE_FAIL;
@@ -2450,6 +2466,8 @@ write_buffers:
 						break;
 					}
 				} else {
+
+                                        // 数据太多，buf不够，需要把buf中的内容存到临时文件
 					if (row_merge_file_create_if_needed(
 						file, tmpfd,
 						buf->n_tuples, path) < 0) {
@@ -2467,6 +2485,7 @@ write_buffers:
 
 					ut_ad(file->n_rec > 0);
 
+                                        // 将buf写入file
 					row_merge_buf_write(buf, file, block);
 
 					if (!row_merge_write(
@@ -2481,6 +2500,8 @@ write_buffers:
 						&block[0], srv_sort_buf_size);
 				}
 			}
+
+                        // 清空buf
 			merge_buf[i] = row_merge_buf_empty(buf);
 
 			if (UNIV_LIKELY(row != NULL)) {
@@ -4539,6 +4560,7 @@ wait_again:
 			row_merge_dup_t	dup = {
 				sort_idx, table, col_map, 0};
 
+                        // 归并排序
 			error = row_merge_sort(
 				trx, &dup, &merge_files[i],
 				block, &tmpfd, stage);

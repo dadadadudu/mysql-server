@@ -3175,7 +3175,7 @@ fail_err:
 	clustered index leaf page of an uncompressed table, check if
 	we have to split the page to reserve enough free space for
 	future updates of records. */
-
+        // 判断当前要插入的页的空间是否足够
 	if (leaf && !page_size.is_compressed() && dict_index_is_clust(index)
 	    && page_get_n_recs(page) >= 2
 	    && dict_index_get_space_reserve() + rec_size > max_size

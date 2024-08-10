@@ -358,13 +358,14 @@ btr_pcur_move_to_next(
 
 	cursor->old_stored = false;
 
+        // 如果当前指向的是页中的最后一条记录，也就是supremum记录，则移动到下一页
 	if (btr_pcur_is_after_last_on_page(cursor)) {
 
 		if (btr_pcur_is_after_last_in_tree(cursor, mtr)) {
 
 			return(FALSE);
 		}
-
+                // 移动到下一页
 		btr_pcur_move_to_next_page(cursor, mtr);
 
 		return(TRUE);

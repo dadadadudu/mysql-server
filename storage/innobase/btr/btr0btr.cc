@@ -1007,6 +1007,12 @@ btr_create(
 			FSP_UP, mtr);
 		ut_ad(block->page.id.page_no() == IBUF_TREE_ROOT_PAGE_NO);
 	} else {
+
+                // 创建PAGE_BTR_SEG_TOP段（非叶子节点段），并将段头存在根页
+                // 会生成一个新的Page
+                // 会生成一个新的Inode
+                // 会把Inode对象在哪个Inode页，具体是第几个Inode对象等信息存在新Page的PAGE_BTR_SEG_TOP区域
+                // 新Page就是索引B+树的根页
 		block = fseg_create(space, 0,
 				    PAGE_HEADER + PAGE_BTR_SEG_TOP, mtr);
 	}
@@ -1016,6 +1022,7 @@ btr_create(
 		return(FIL_NULL);
 	}
 
+        // block是内存page的控制块，frame是内存page本身
 	page_no = block->page.id.page_no();
 	frame = buf_block_get_frame(block);
 
@@ -1031,6 +1038,7 @@ btr_create(
 		pages */
 		buf_block_dbg_add_level(block, SYNC_TREE_NODE_NEW);
 
+                // 创建PAGE_BTR_SEG_LEAF段（叶子节点段），并将段头存在根页
 		if (!fseg_create(space, page_no,
 				 PAGE_HEADER + PAGE_BTR_SEG_LEAF, mtr)) {
 			/* Not enough space for new segment, free root
@@ -1081,6 +1089,7 @@ btr_create(
 		}
 	} else {
 		if (index != NULL) {
+                        // 将空闲Page初始化或索引页
 			page = page_create(block, mtr,
 					   dict_table_is_comp(index->table),
 					   dict_index_is_spatial(index));

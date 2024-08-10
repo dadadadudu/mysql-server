@@ -5335,15 +5335,19 @@ buf_page_create(
 	ut_ad(mtr->is_active());
 	ut_ad(page_id.space() != 0 || !page_size.is_compressed());
 
+        // 从free链表或LRU链表中获取到的空闲页block
 	free_block = buf_LRU_get_free_block(buf_pool);
 
 	buf_pool_mutex_enter(buf_pool);
 
+
 	hash_lock = buf_page_hash_lock_get(buf_pool, page_id);
 	rw_lock_x_lock(hash_lock);
 
+        // 根据page_id从(buf_pool)->page_hash哈希表中找到的block对象
 	block = (buf_block_t*) buf_page_hash_get_low(buf_pool, page_id);
 
+        // page_id在buf_pool->page_hash哈希表中找到的block对象，就返回该对象
 	if (block
 	    && buf_page_in_file(&block->page)
 	    && !buf_pool_watch_is_sentinel(buf_pool, &block->page)) {
@@ -5358,13 +5362,14 @@ buf_page_create(
 		buf_pool_mutex_exit(buf_pool);
 		rw_lock_x_unlock(hash_lock);
 
+                // 把free_block又放回free链表中
 		buf_block_free(free_block);
 
 		return(buf_page_get_with_no_latch(page_id, page_size, mtr));
 	}
 
 	/* If we get here, the page was not in buf_pool: init it there */
-
+        // 否则则初始化从free链表中拿到的空闲页
 	DBUG_PRINT("ib_buf", ("create page " UINT32PF ":" UINT32PF,
 			      page_id.space(), page_id.page_no()));
 
@@ -5372,11 +5377,13 @@ buf_page_create(
 
 	buf_page_mutex_enter(block);
 
+        // 初始化block
 	buf_page_init(buf_pool, page_id, page_size, block);
 
 	rw_lock_x_unlock(hash_lock);
 
 	/* The block must be put to the LRU list */
+        // 将block添加到LRU链表
 	buf_LRU_add_block(&block->page, FALSE);
 
 	buf_block_buf_fix_inc(block, __FILE__, __LINE__);

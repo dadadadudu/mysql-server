@@ -256,11 +256,15 @@ page_mem_alloc_heap(
 
 	ut_ad(page && heap_no);
 
+        // 可用空间
 	avl_space = page_get_max_insert_size(page, 1);
 
 	if (avl_space >= need) {
+
+                // 先获取当前PAGE_HEAP_TOP位置的地址
 		block = page_header_get_ptr(page, PAGE_HEAP_TOP);
 
+                // 然后增加need个字节，并修改PAGE_HEAP_TOP的值
 		page_header_set_ptr(page, page_zip, PAGE_HEAP_TOP,
 				    block + need);
 		*heap_no = page_dir_get_n_heap(page);
@@ -328,7 +332,7 @@ static const byte infimum_supremum_compact[] = {
 	'i', 'n', 'f', 'i', 'm', 'u', 'm', 0,
 	/* the supremum record */
 	0x01/*n_owned=1*/,
-	0x00, 0x0b/* heap_no=1, REC_STATUS_SUPREMUM */,
+	0x00, 0x0b/* heap_no=1, REC_STATUS_SUPREMUM */,  // 00000000 00001011 13个bit表示heap_no， 3个bit表示记录类型
 	0x00, 0x00/* end of record list */,
 	's', 'u', 'p', 'r', 'e', 'm', 'u', 'm'
 };
@@ -427,6 +431,7 @@ page_create(
 {
 	ut_ad(mtr->is_named_space(block->page.id.space()));
 	page_create_write_log(buf_block_get_frame(block), mtr, comp, is_rtree);
+
 	return(page_create_low(block, comp, is_rtree));
 }
 
