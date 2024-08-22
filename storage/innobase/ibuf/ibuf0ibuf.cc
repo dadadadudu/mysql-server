@@ -2027,6 +2027,7 @@ ibuf_add_free_page(void)
 	of a deadlock. This is the reason why we created a special ibuf
 	header page apart from the ibuf tree. */
 
+        // 从ibuf段分配一个空闲页
 	block = fseg_alloc_free_page(
 		header_page + IBUF_HEADER + IBUF_TREE_SEG_HEADER, 0, FSP_UP,
 		&mtr);
@@ -2040,13 +2041,17 @@ ibuf_add_free_page(void)
 	ut_ad(rw_lock_get_x_lock_count(&block->lock) == 1);
 	ibuf_enter(&mtr);
 	mutex_enter(&ibuf_mutex);
+
+        // ibuf b+树根页
 	root = ibuf_tree_root_get(&mtr);
 
 	buf_block_dbg_add_level(block, SYNC_IBUF_TREE_NODE_NEW);
-	page = buf_block_get_frame(block);
+
+        // ibuf空闲页
+        page = buf_block_get_frame(block);
 
 	/* Add the page to the free list and update the ibuf size data */
-
+        // 把分配的ibuf空闲页添加到ibuf根页的空闲列表中
 	flst_add_last(root + PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST,
 		      page + PAGE_HEADER + PAGE_BTR_IBUF_FREE_LIST_NODE, &mtr);
 
@@ -2062,10 +2067,13 @@ ibuf_add_free_page(void)
 	const page_id_t		page_id(IBUF_SPACE_ID, block->page.id.page_no());
 	const page_size_t	page_size(space->flags);
 
+        // 该页是系统表空间的中页，而系统表空间中页有ibuf bitmap页，所以需要修改bitmap中该页对应的标记
+        // bitmap中的IBUF_BITMAP_IBUF是用来标志某个区中的某一页是ibuf页，IBUF_BITMAP_BUFFERED表示该页有缓存操作在ibuf b+树中
 	bitmap_page = ibuf_bitmap_get_map_page(page_id, page_size, &mtr);
 
 	mutex_exit(&ibuf_mutex);
 
+        // 在bitmap中设置对应为页的状态为IBUF_BITMAP_IBUF，表示是ibuf页
 	ibuf_bitmap_page_set_bits(bitmap_page, page_id, page_size,
 				  IBUF_BITMAP_IBUF, TRUE, &mtr);
 

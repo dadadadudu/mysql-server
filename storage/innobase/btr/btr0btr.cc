@@ -1011,7 +1011,7 @@ btr_create(
                 // 创建PAGE_BTR_SEG_TOP段（非叶子节点段），并将段头存在根页
                 // 会生成一个新的Page
                 // 会生成一个新的Inode
-                // 会把Inode对象在哪个Inode页，具体是第几个Inode对象等信息存在新Page的PAGE_BTR_SEG_TOP区域
+                // 会把Inode对象在Inode页，具体是第几个Inode对象等信息存在新Page的PAGE_BTR_SEG_TOP区域
                 // 新Page就是索引B+树的根页
 		block = fseg_create(space, 0,
 				    PAGE_HEADER + PAGE_BTR_SEG_TOP, mtr);

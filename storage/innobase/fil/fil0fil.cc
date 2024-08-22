@@ -3632,7 +3632,7 @@ fil_ibd_create(
 	}
 #else
 	atomic_write = false;
-        //
+        // 初始化file内容为0
 	success = os_file_set_size(
 		path, file, size * UNIV_PAGE_SIZE, srv_read_only_mode);
 
@@ -3680,7 +3680,10 @@ fil_ibd_create(
 	tablespace header. */
 	flags = fsp_flags_set_page_size(flags, univ_page_size);
 #endif /* !UNIV_HOTBACKUP */
+
+        // 初始化后
 	fsp_header_init_fields(page, space_id, flags);
+        // 写入Fil Header中的FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID
 	mach_write_to_4(page + FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID, space_id);
 
 	const page_size_t	page_size(flags);
@@ -3760,6 +3763,8 @@ fil_ibd_create(
 		}
 	}
 #endif /* !UNIV_HOTBACKUP */
+
+        // 创建表空间对应的对象fil_space_t
 	space = fil_space_create(name, space_id, flags, is_temp
 				 ? FIL_TYPE_TEMPORARY : FIL_TYPE_TABLESPACE);
 

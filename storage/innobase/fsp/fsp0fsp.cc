@@ -796,7 +796,8 @@ fsp_init_file_page(
 	buf_block_t*	block,
 	mtr_t*		mtr)
 {
-	fsp_init_file_page_low(block);
+	// 初始化fil_header
+        fsp_init_file_page_low(block);
 
 	ut_d(fsp_space_modify_check(block->page.id.space(), mtr));
 	mlog_write_initial_log_record(buf_block_get_frame(block),
@@ -1624,7 +1625,7 @@ fsp_fill_free_list(
 	ut_ad(flags == space->flags);
 
 	const page_size_t	page_size(flags);
-
+        // FSP_EXTENT_SIZE * FSP_FREE_ADD表示每次增加多少空闲页到  如果当前表空间中的页数size 小于 limit
 	if (size < limit + FSP_EXTENT_SIZE * FSP_FREE_ADD) {
 		if ((!init_space && !is_system_tablespace(space->id))
 		    || (space->id == srv_sys_space.space_id()
@@ -1693,7 +1694,7 @@ fsp_fill_free_list(
 					mtr_set_log_mode(
 						&ibuf_mtr, MTR_LOG_NO_REDO);
 				}
-
+                                // 第0页是FSP_HDR页，第1页是IBUF页
 				const page_id_t	page_id(
 					space->id,
 					i + FSP_IBUF_BITMAP_OFFSET);
@@ -1708,7 +1709,7 @@ fsp_fill_free_list(
 				buf_block_dbg_add_level(block, SYNC_FSP_PAGE);
 
 				fsp_init_file_page(block, &ibuf_mtr);
-
+                                // 初始化IBUF页
 				ibuf_bitmap_page_init(block, &ibuf_mtr);
 
 				mtr_commit(&ibuf_mtr);
