@@ -3106,7 +3106,7 @@ btr_cur_optimistic_insert(
 
 	/* Calculate the record size when entry is converted to a record */
 	rec_size = rec_get_converted_size(index, entry, n_ext);
-
+        // 当前记录是不是big_rec，如果是则需要把这个记录的一部分字段存到另外的页去，这块还没仔细研究
 	if (page_zip_rec_needs_ext(rec_size, page_is_comp(page),
 				   dtuple_get_n_fields(entry), page_size)) {
 
@@ -3118,7 +3118,7 @@ btr_cur_optimistic_insert(
 
 			return(DB_TOO_BIG_RECORD);
 		}
-
+                // 得到插入到本页中的记录大小
 		rec_size = rec_get_converted_size(index, entry, n_ext);
 	}
 
@@ -3156,7 +3156,7 @@ fail_err:
 
 		return(err);
 	}
-
+        // 插入记录可能需要新增一个页目录slot，max_size表示增加一个slot后，页面剩余的空间
 	ulint	max_size = page_get_max_insert_size_after_reorganize(page, 1);
 
 	if (page_has_garbage(page)) {
@@ -3175,10 +3175,11 @@ fail_err:
 	clustered index leaf page of an uncompressed table, check if
 	we have to split the page to reserve enough free space for
 	future updates of records. */
-        // 判断当前要插入的页的空间是否足够
+        // 如果页面上至少有两条记录（不包括最大最小记录），记录大小比空闲空间至少大1KB，则判断是否需要拆分页，如果需要则乐观插入失败
 	if (leaf && !page_size.is_compressed() && dict_index_is_clust(index)
 	    && page_get_n_recs(page) >= 2
 	    && dict_index_get_space_reserve() + rec_size > max_size
+//	    && dict_index_get_space_reserve() + rec_size > 1  // 测试用
 	    && (btr_page_get_split_rec_to_right(cursor, &dummy)
 		|| btr_page_get_split_rec_to_left(cursor, &dummy))) {
 		goto fail;
@@ -3216,7 +3217,7 @@ fail_err:
 			if (err != DB_SUCCESS) {
 				goto fail_err;
 			}
-
+                        // 获取锁成功就会执行page_cur_tuple_insert()进行entry的插入，并返回插入记录后记录的中间位置指针
 			*rec = page_cur_tuple_insert(
 				page_cursor, entry, index, offsets, heap,
 				n_ext, mtr);
@@ -3369,7 +3370,7 @@ btr_cur_pessimistic_insert(
 	cursor->flag = BTR_CUR_BINARY;
 
 	/* Check locks and write to undo log, if specified */
-
+        // 乐观插入是先判断有没有空闲空间，悲观插入是上来就判断锁和写UNDO LOG，因为悲观插入就算当前页没有空间页会进行页拆分把记录插进去
 	err = btr_cur_ins_lock_and_undo(flags, cursor, entry,
 					thr, mtr, &inherit);
 
@@ -3419,13 +3420,16 @@ btr_cur_pessimistic_insert(
 		}
 	}
 
+        // 如果是根页，则不仅仅是页的拆分，还要做根页的转换
 	if (dict_index_get_page(index)
 	    == btr_cur_get_block(cursor)->page.id.page_no()) {
 
 		/* The page is the root page */
+                // 会先进行根页的转换，然后调用下面btr_page_split_and_insert()方法进行普通页的拆分和插入
 		*rec = btr_root_raise_and_insert(
 			flags, cursor, offsets, heap, entry, n_ext, mtr);
 	} else {
+                // 普通页的拆分和插入，btr_root_raise_and_insert中其实也会调用到这个方法
 		*rec = btr_page_split_and_insert(
 			flags, cursor, offsets, heap, entry, n_ext, mtr);
 	}

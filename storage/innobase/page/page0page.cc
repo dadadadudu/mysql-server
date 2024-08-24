@@ -1086,6 +1086,7 @@ delete_all:
 		log_mode = mtr_set_log_mode(mtr, MTR_LOG_NONE);
 
 		do {
+                        // 一开始cur会执行rec记录，从这条记录开始删，删到最大记录结束
 			page_cur_t	cur;
 			page_cur_position(rec, block, &cur);
 
@@ -1252,6 +1253,7 @@ page_delete_rec_list_start(
 
 	page_delete_rec_list_write_log(rec, index, type, mtr);
 
+        // cur1指向当前页中的第一条记录
 	page_cur_set_before_first(block, &cur1);
 	page_cur_move_to_next(&cur1);
 
@@ -1262,6 +1264,7 @@ page_delete_rec_list_start(
 	while (page_cur_get_rec(&cur1) != rec) {
 		offsets = rec_get_offsets(page_cur_get_rec(&cur1), index,
 					  offsets, ULINT_UNDEFINED, &heap);
+                // 删除cur1执行的记录，并且会移动到下一条记录
 		page_cur_delete_rec(&cur1, index, offsets, mtr);
 	}
 

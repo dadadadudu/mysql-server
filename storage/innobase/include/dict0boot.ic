@@ -43,17 +43,23 @@ dict_sys_get_new_row_id(void)
 
 	mutex_enter(&dict_sys->mutex);
 
+        // 从系统字典中获取当然row_id的值
 	id = dict_sys->row_id;
-        // 如果row_id是256的倍数，则
+
+        // 在系统运行过程中，可能会不断地获取并自增row_id，当增加到256的倍数时，就记录一下到磁盘
+        // 正常来说应该是每次加1就要存到磁盘，但是这样太消耗性能了，所以是每256次才存一次磁盘
+        // 假如在还没有达到256次的时候MySQL重启了，会拿当前磁盘中村的ROW_ID加上DICT_HDR_ROW_ID_WRITE_MARGIN，相当于跳过一个步长
 	if (0 == (id % DICT_HDR_ROW_ID_WRITE_MARGIN)) {
 
 		dict_hdr_flush_row_id();
 	}
 
+        // 自增
 	dict_sys->row_id++;
 
 	mutex_exit(&dict_sys->mutex);
 
+        // 返回自增前的id
 	return(id);
 }
 

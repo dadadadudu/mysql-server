@@ -1238,12 +1238,12 @@ page_get_max_insert_size_after_reorganize(
 {
 	ulint	occupied;
 	ulint	free_space;
-
+        // page_get_data_size(page)得到当前页面记录占用的总大小（除开最大最小记录） + 插入一条记录的页目录大小
 	occupied = page_get_data_size(page)
 		+ page_dir_calc_reserved_space(n_recs + page_get_n_recs(page));
-
+        // 页面空闲的空间
 	free_space = page_get_free_space_of_empty(page_is_comp(page));
-
+        // 相当于当前页面加了一个slot后占用的空间是否大于空闲空间
 	if (occupied > free_space) {
 
 		return(0);

@@ -335,7 +335,7 @@ dict_boot(void)
 	..._MARGIN, it will immediately be updated to the disk-based
 	header. */
 
-        // 存储在磁盘中最新的row_id
+        // 把磁盘中的的row_id拿出来+DICT_HDR_ROW_ID_WRITE_MARGIN再设置到dict_sys中
 	dict_sys->row_id = DICT_HDR_ROW_ID_WRITE_MARGIN
 		+ ut_uint64_align_up(mach_read_from_8(dict_hdr + DICT_HDR_ROW_ID),
 				     DICT_HDR_ROW_ID_WRITE_MARGIN);

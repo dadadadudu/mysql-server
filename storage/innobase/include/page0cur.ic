@@ -274,7 +274,7 @@ page_cur_tuple_insert(
 					   + dtuple_get_n_fields(tuple))
 					* sizeof **offsets);
 	}
-
+        // 把entry，也就是dtuple转成字节
 	rec = rec_convert_dtuple_to_rec((byte*) mem_heap_alloc(*heap, size),
 					index, tuple, n_ext);
 

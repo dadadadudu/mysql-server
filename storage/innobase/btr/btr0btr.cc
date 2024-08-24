@@ -754,29 +754,34 @@ btr_page_get_father_node_ptr_func(
 
 	ut_ad(dict_index_get_page(index) != page_no);
 
+        // level如果是0表示是叶子节点
 	level = btr_page_get_level(btr_cur_get_page(cursor), mtr);
 
 	user_rec = btr_cur_get_rec(cursor);
 	ut_a(page_rec_is_user_rec(user_rec));
 
+        // 构建孩子节点的第一条用户记录，也就是最小记录的下一条记录，根据索引定义构造出父节点的tuple
 	tuple = dict_index_build_node_ptr(index, user_rec, 0, heap, level);
 	if (dict_table_is_intrinsic(index->table)) {
 		btr_cur_search_to_nth_level_with_no_latch(
 			index, level + 1, tuple, PAGE_CUR_LE, cursor,
 			file, line, mtr);
 	} else {
+                // 会通过搜索B+树，定位到level+1层中比tuple小于等于的第一条索引记录，而这条记录所在的页就是要找的孩子节点的父节点
 		btr_cur_search_to_nth_level(
 			index, level + 1, tuple,
 			PAGE_CUR_LE, latch_mode, cursor, 0,
 			file, line, mtr);
 	}
 
+        // node_ptr表示父节点中指向孩子节点的node_ptr，相当于父节点中的一条索引记录
 	node_ptr = btr_cur_get_rec(cursor);
 	ut_ad(!page_rec_is_comp(node_ptr)
 	      || rec_get_status(node_ptr) == REC_STATUS_NODE_PTR);
 	offsets = rec_get_offsets(node_ptr, index, offsets,
 				  ULINT_UNDEFINED, &heap);
 
+        // 如果发现索引记录的页号不等于当前孩子节点的页号，那就肯定有问题了，报错
 	if (btr_node_ptr_get_child_page_no(node_ptr, offsets) != page_no) {
 		rec_t*	print_rec;
 
@@ -1011,7 +1016,7 @@ btr_create(
                 // 创建PAGE_BTR_SEG_TOP段（非叶子节点段），并将段头存在根页
                 // 会生成一个新的Page
                 // 会生成一个新的Inode
-                // 会把Inode对象在Inode页，具体是第几个Inode对象等信息存在新Page的PAGE_BTR_SEG_TOP区域
+                // 会把Inode对象存在Inode页中，具体是第几个Inode对象等信息存在新Page的PAGE_BTR_SEG_TOP区域
                 // 新Page就是索引B+树的根页
 		block = fseg_create(space, 0,
 				    PAGE_HEADER + PAGE_BTR_SEG_TOP, mtr);
@@ -1662,7 +1667,7 @@ btr_root_raise_and_insert(
 	a node pointer to the new page, and then splitting the new page. */
 
 	level = btr_page_get_level(root, mtr);
-
+        // 分配一个新页
 	new_block = btr_page_alloc(index, 0, FSP_NO_DIR, level, mtr, mtr);
 
 	new_page = buf_block_get_frame(new_block);
@@ -1671,7 +1676,7 @@ btr_root_raise_and_insert(
 	ut_a(!new_page_zip
 	     || page_zip_get_size(new_page_zip)
 	     == page_zip_get_size(root_page_zip));
-
+        // 初始化新页为INDEX页
 	btr_page_create(new_block, new_page_zip, index, level, mtr);
 
 	/* Set the next node and previous node fields of new page */
@@ -1690,6 +1695,7 @@ btr_root_raise_and_insert(
 		ut_a(new_page_zip);
 
 		/* Copy the page byte for byte. */
+                // 把根页中的记录复制给新页
 		page_zip_copy_recs(new_page_zip, new_page,
 				   root_page_zip, root, index, mtr);
 
@@ -1723,6 +1729,8 @@ btr_root_raise_and_insert(
 		*heap = mem_heap_create(1000);
 	}
 
+        // 根据新页的第一条记录，也就是最小记录的下一条记录，也就是主键最小的记录，或者索引键最小的记录，和新页的页号生成一个node_ptr
+        // node_ptr就表示非叶子节点中的索引记录
 	rec = page_rec_get_next(page_get_infimum_rec(new_page));
 	new_page_no = new_block->page.id.page_no();
 
@@ -1746,6 +1754,7 @@ btr_root_raise_and_insert(
 			     | REC_INFO_MIN_REC_FLAG);
 
 	/* Rebuild the root page to get free space */
+        // 清空根页，并进行level+1
 	btr_page_empty(root_block, root_page_zip, index, level + 1, mtr);
 
 	/* Set the next node and previous node fields, although
@@ -1756,12 +1765,13 @@ btr_root_raise_and_insert(
 	btr_page_set_next(root, root_page_zip, FIL_NULL, mtr);
 	btr_page_set_prev(root, root_page_zip, FIL_NULL, mtr);
 
+        // cursor目前指向的仍然是根页
 	page_cursor = btr_cur_get_page_cur(cursor);
 
 	/* Insert node pointer to the root */
-
+        // page_cursor执行根页中的最小记录
 	page_cur_set_before_first(root_block, page_cursor);
-
+        // 把node_ptr插入到根页中去
 	node_ptr_rec = page_cur_tuple_insert(page_cursor, node_ptr,
 					     index, offsets, heap, 0, mtr);
 
@@ -1777,6 +1787,7 @@ btr_root_raise_and_insert(
 	}
 
 	/* Reposition the cursor to the child node */
+        // tuple就是entry，就是当前要插入的记录，page_cursor执行新记录要插入的位置，也就是新记录所在的前一条记录，新记录要插在这条记录的后面
 	page_cur_search(new_block, index, tuple, page_cursor);
 
 	/* Split the child and insert tuple */
@@ -1785,6 +1796,7 @@ btr_root_raise_and_insert(
 		return(rtr_page_split_and_insert(flags, cursor, offsets, heap,
 						 tuple, n_ext, mtr));
 	} else {
+                // 会进行普通页的拆分和插入
 		return(btr_page_split_and_insert(flags, cursor, offsets, heap,
 						 tuple, n_ext, mtr));
 	}
@@ -1849,25 +1861,26 @@ btr_page_get_split_rec_to_right(
 {
 	page_t*	page;
 	rec_t*	insert_point;
-
+        // cursor指向的是插入点
 	page = btr_cur_get_page(cursor);
 	insert_point = btr_cur_get_rec(cursor);
 
 	/* We use eager heuristics: if the new insert would be right after
 	the previous insert on the same page, we assume that there is a
 	pattern of sequential inserts here. */
-
+        // PAGE_LAST_INSERT指向上一条插入的记录，insert_point表示新记录要插入的位置，如果新记录是插在上一条插入记录的后面
 	if (page_header_get_ptr(page, PAGE_LAST_INSERT) == insert_point) {
 
 		rec_t*	next_rec;
 
 		next_rec = page_rec_get_next(insert_point);
-
+                // 如果上一条插入记录的下一条记录是最大记录，相当于连续插入在记录链表的中间位置，则不需要拆分页，比如自增id连续插入
 		if (page_rec_is_supremum(next_rec)) {
 split_at_new:
 			/* Split at the new record to insert */
 			*split_rec = NULL;
 		} else {
+                        // 假如是插在记录链表的中间位置，则判断下一条记录下一条记录是不是最大记录，
 			rec_t*	next_next_rec = page_rec_get_next(next_rec);
 			if (page_rec_is_supremum(next_next_rec)) {
 
@@ -2250,15 +2263,20 @@ btr_attach_half_pages(
 			offsets, lower_page_no, mtr);
 		mem_heap_empty(heap);
 	} else {
+
+                // 低页
 		lower_page = buf_block_get_frame(block);
 		lower_page_no = block->page.id.page_no();
 		lower_page_zip = buf_block_get_page_zip(block);
-		upper_page = buf_block_get_frame(new_block);
+
+                // 高页
+                upper_page = buf_block_get_frame(new_block);
 		upper_page_no = new_block->page.id.page_no();
 		upper_page_zip = buf_block_get_page_zip(new_block);
 	}
 
 	/* Get the previous and next pages of page */
+        // 当前页的前一页和后一页，
 	prev_page_no = btr_page_get_prev(page, mtr);
 	next_page_no = btr_page_get_next(page, mtr);
 
@@ -2283,13 +2301,13 @@ btr_attach_half_pages(
 
 	/* Build the node pointer (= node key and page address) for the upper
 	half */
-
+        // 根据upper_page_no，也就是新页的第一条记录split_rec，生成node_ptr_upper
 	node_ptr_upper = dict_index_build_node_ptr(index, split_rec,
 						   upper_page_no, heap, level);
 
 	/* Insert it next to the pointer to the lower half. Note that this
 	may generate recursion leading to a split on the higher level. */
-
+        // 将node_ptr_upper插入到B+树到上一层对应的节点中
 	btr_insert_on_non_leaf_level(flags, index, level + 1,
 				     node_ptr_upper, mtr);
 
@@ -2409,11 +2427,14 @@ btr_insert_into_right_sibling(
 		mtr, block, MTR_MEMO_PAGE_X_FIX, cursor->index->table));
 	ut_ad(heap);
 
+        // 没有下一页，或者插入点记录的下一条记录不是最大记录
 	if (next_page_no == FIL_NULL || !page_rec_is_supremum(
 			page_rec_get_next(btr_cur_get_rec(cursor)))) {
 
 		return(NULL);
 	}
+
+        // 也就是说当前页有下一页，并且新记录是想插入在当前页的最后时，才考虑将新记录插入到下一页
 
 	page_cur_t	next_page_cursor;
 	buf_block_t*	next_block;
@@ -2424,6 +2445,7 @@ btr_insert_into_right_sibling(
 
 	const ulint	space = block->page.id.space();
 
+        // 下一页
 	next_block = btr_block_get(
 		page_id_t(space, next_page_no), block->page.size,
 		RW_X_LATCH, cursor->index, mtr);
@@ -2431,6 +2453,7 @@ btr_insert_into_right_sibling(
 
 	bool	is_leaf = page_is_leaf(next_page);
 
+        // 找到当前页的父节点页，next_father_cursor会执行当前页在父节点中对应的索引记录
 	btr_page_get_father(
 		cursor->index, next_block, mtr, &next_father_cursor);
 
@@ -2592,6 +2615,8 @@ func_start:
 	ut_ad(!page_is_empty(page));
 
 	/* try to insert to the next page if possible before split */
+        // 当前页空间不够，那是不是可以直接把记录插入到右边的下一页呢，前提条件是，新记录是当前页的最后一条记录
+        // 也就是会判断插入点的下一条记录是不是最大记录，如果符合条件，就会把记录直接插入到下一页中
 	rec = btr_insert_into_right_sibling(
 		flags, cursor, offsets, *heap, tuple, n_ext, mtr);
 
@@ -2605,7 +2630,8 @@ func_start:
 	tuple to be inserted should be the first record on the upper
 	half-page */
 	insert_left = FALSE;
-
+        // n_iterations一开始是等于0的
+        // cursor执行的是插入点
 	if (n_iterations > 0) {
 		direction = FSP_UP;
 		hint_page_no = page_no + 1;
@@ -2616,7 +2642,7 @@ func_start:
 				cursor, tuple, offsets, n_uniq, heap);
 		}
 	} else if (btr_page_get_split_rec_to_right(cursor, &split_rec)) {
-		direction = FSP_UP;
+                direction = FSP_UP;
 		hint_page_no = page_no + 1;
 
 	} else if (btr_page_get_split_rec_to_left(cursor, &split_rec)) {
@@ -2631,39 +2657,46 @@ func_start:
 		can't split the node in the middle by default. We need
 		to determine whether the new record will be inserted
 		to the left or right. */
-
+                // cursor指向的是插入点，如果page中至少有两条记录才进行拆分
 		if (page_get_n_recs(page) > 1) {
+                        // 如果页面中有多条记录，则获取中间位置的记录，总记录数/2
 			split_rec = page_get_middle_rec(page);
 		} else if (btr_page_tuple_smaller(cursor, tuple,
 						  offsets, n_uniq, heap)) {
-			split_rec = page_rec_get_next(
+			// 如果页面中只有一条记录，并且新记录比这条记录还要小，
+                        split_rec = page_rec_get_next(
 				page_get_infimum_rec(page));
 		} else {
+                        // 如果页面中只有一个记录，但是新记录比这条记录要大
 			split_rec = NULL;
 		}
 	}
 
 	/* 2. Allocate a new page to the index */
+        // hint_page_no表示希望的页号，但是不一定非得是这个页号
 	new_block = btr_page_alloc(cursor->index, hint_page_no, direction,
 				   btr_page_get_level(page, mtr), mtr, mtr);
 
 	new_page = buf_block_get_frame(new_block);
 	new_page_zip = buf_block_get_page_zip(new_block);
+        // 初始化为INDEX
 	btr_page_create(new_block, new_page_zip, cursor->index,
 			btr_page_get_level(page, mtr), mtr);
 
 	/* 3. Calculate the first record on the upper half-page, and the
 	first record (move_limit) on original page which ends up on the
 	upper half */
-
+        // split_rec为null
 	if (split_rec) {
 		first_rec = move_limit = split_rec;
 
 		*offsets = rec_get_offsets(split_rec, cursor->index, *offsets,
 					   n_uniq, heap);
 
+                // 新记录如果比中间记录小，则新记录插入在中间记录的左边，否则插在右边
 		insert_left = cmp_dtuple_rec(tuple, split_rec, *offsets) < 0;
 
+                // 如果插入在中间记录的右边
 		if (!insert_left && new_page_zip && n_iterations > 0) {
 			/* If a compressed page has already been split,
 			avoid further splits by inserting the record
@@ -2689,7 +2722,7 @@ insert_empty:
 	}
 
 	/* 4. Do first the modifications in the tree structure */
-
+        // 生成了新页，需要将新页插入到B+树中，叶子节点要形成链表，父节点中要插入对应的node_ptr
 	btr_attach_half_pages(flags, cursor->index, block,
 			      first_rec, new_block, direction, mtr);
 
@@ -2744,9 +2777,11 @@ insert_empty:
 			as appropriate.  Deleting will always succeed. */
 			ut_a(new_page_zip);
 
+                        // 把当前页中的记录复制给新页
 			page_zip_copy_recs(new_page_zip, new_page,
 					   page_zip, page, cursor->index, mtr);
-			page_delete_rec_list_end(move_limit - page + new_page,
+			// 删除新页中不需要的要的记录
+                        page_delete_rec_list_end(move_limit - page + new_page,
 						 new_block, cursor->index,
 						 ULINT_UNDEFINED,
 						 ULINT_UNDEFINED, mtr);
@@ -2764,11 +2799,13 @@ insert_empty:
 				new_block, block, cursor->index);
 
 			/* Delete the records from the source page. */
-
+                        // 删除当前页，也就是被复制页中不需要的记录，move_limit表示当前页的中间记录，把中间记录之前的记录都删除掉
+                        // 留下来的都是比move_limit大的记录，所以当前在右边
 			page_delete_rec_list_start(move_limit, block,
 						   cursor->index, mtr);
 		}
 
+                // direction == FSP_DOWN表示新页在当前页的左边
 		left_block = new_block;
 		right_block = block;
 
@@ -2791,9 +2828,12 @@ insert_empty:
 			as appropriate.  Deleting will always succeed. */
 			ut_a(new_page_zip);
 
+                        // 复制记录
 			page_zip_copy_recs(new_page_zip, new_page,
 					   page_zip, page, cursor->index, mtr);
-			page_delete_rec_list_start(move_limit - page
+
+                        // 删除新页中前一半的记录
+                        page_delete_rec_list_start(move_limit - page
 						   + new_page, new_block,
 						   cursor->index, mtr);
 
@@ -2810,7 +2850,8 @@ insert_empty:
 				new_block, block, cursor->index);
 
 			/* Delete the records from the source page. */
-
+                        // 从move_limit开始删，删到最大记录，留下来的就是move_limit之前的记录，就是小记录，当前页放左边
+                        // 删除当前页中后一半的记录
 			page_delete_rec_list_end(move_limit, block,
 						 cursor->index,
 						 ULINT_UNDEFINED,
@@ -2837,6 +2878,7 @@ insert_empty:
 
 	/* 6. The split and the tree modification is now completed. Decide the
 	page where the tuple should be inserted */
+        // 如果新记录是插在中间记录的左边，则取left_block，否则取right_block
 
 	if (insert_left) {
 		insert_block = left_block;
@@ -2845,6 +2887,7 @@ insert_empty:
 	}
 
 	/* 7. Reposition the cursor for insert and try insertion */
+        // 插入新记录
 	page_cursor = btr_cur_get_page_cur(cursor);
 
 	page_cur_search(insert_block, cursor->index, tuple, page_cursor);
@@ -2906,7 +2949,7 @@ insert_failed:
 func_exit:
 	/* Insert fit on the page: update the free bits for the
 	left and right pages in the same mtr */
-
+        // 如果不是聚集索引，并且是叶子节点，就会更新ibuf
 	if (!dict_index_is_clust(cursor->index)
 	    && !dict_table_is_temporary(cursor->index->table)
 	    && page_is_leaf(page)) {

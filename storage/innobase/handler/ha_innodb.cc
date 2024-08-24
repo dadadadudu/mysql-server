@@ -11972,7 +11972,7 @@ create_table_info_t::create_table()
 	}
 
 	/* Create the keys */
-
+        // 没有定义索引，或者没有定义PRIMARY，就会创建GEN_CLUSTER_INDEX
 	if (m_form->s->keys == 0 || primary_key_no == -1) {
 		/* Create an index which is used as the clustered index;
 		order the rows by their row id which is internally generated
@@ -11984,7 +11984,7 @@ create_table_info_t::create_table()
 			DBUG_RETURN(error);
 		}
 	}
-
+        // 定义了PRIMARY
 	if (primary_key_no != -1) {
 		/* In InnoDB the clustered index must always be created
 		first */
@@ -12056,7 +12056,7 @@ create_table_info_t::create_table()
 			DBUG_RETURN(error);
 		}
 	}
-
+        // 创建其他索引，i!=0就表示不再创建PRIMARY索引，因为前面已经创建了
 	for (i = 0; i < m_form->s->keys; i++) {
 
 		if (i != static_cast<uint>(primary_key_no)) {

@@ -2525,7 +2525,7 @@ row_ins_clust_index_entry_low(
 
 		mtr.set_log_mode(MTR_LOG_NO_REDO);
 	}
-
+        // 判断当前插入的索引是不是正在进行Online DDL
 	if (mode == BTR_MODIFY_LEAF && dict_index_is_online_ddl(index)) {
 		mode = BTR_MODIFY_LEAF | BTR_ALREADY_S_LATCHED;
 		mtr_s_lock(dict_index_get_lock(index), &mtr);
@@ -2640,7 +2640,8 @@ err_exit:
 		if (mode != BTR_MODIFY_TREE) {
 			ut_ad((mode & ~BTR_ALREADY_S_LATCHED)
 			      == BTR_MODIFY_LEAF);
-			err = btr_cur_optimistic_insert(
+			// 乐观插入
+                        err = btr_cur_optimistic_insert(
 				flags, cursor, &offsets, &offsets_heap,
 				entry, &insert_rec, &big_rec,
 				n_ext, thr, &mtr);
@@ -2653,12 +2654,14 @@ err_exit:
 
 			DEBUG_SYNC_C("before_insert_pessimitic_row_ins_clust");
 
+                        // 先进行乐观插入
 			err = btr_cur_optimistic_insert(
 				flags, cursor,
 				&offsets, &offsets_heap,
 				entry, &insert_rec, &big_rec,
 				n_ext, thr, &mtr);
 
+                        // 失败了则进行悲观插入
 			if (err == DB_FAIL) {
 				err = btr_cur_pessimistic_insert(
 					flags, cursor,
@@ -3292,7 +3295,7 @@ row_ins_clust_index_entry(
 	ulint	n_uniq;
 
 	DBUG_ENTER("row_ins_clust_index_entry");
-
+        // 不管外键的逻辑
 	if (!index->table->foreign_set.empty()) {
 		err = row_ins_check_foreign_constraints(
 			index->table, index, entry, thr);
@@ -3736,7 +3739,7 @@ row_ins(
 	if (node->state == INS_NODE_ALLOC_ROW_ID) {
                 // 分配row_id
 		row_ins_alloc_row_id_step(node);
-                // 新增记录可能需要插入到多个索引中，此处先找出表的第一个索引
+                // 新增记录可能需要插入到多个索引中，此处先找出表的第一个索引，第一个索引一定是聚集索引
 		node->index = dict_table_get_first_index(node->table);
                 // 找出需要插到第一个索引中对应的第一个entry，可能是批量插入，这里先插入第一条
 		node->entry = UT_LIST_GET_FIRST(node->entry_list);
