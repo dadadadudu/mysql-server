@@ -139,6 +139,7 @@ row_build_index_entry_low(
 
 			ut_ad(dfield_is_null(dfield2) || dfield2->data);
 		} else {
+                        // row对应的就是upd_row
 			dfield2 = dtuple_get_nth_field(row, col_no);
 			ut_ad(dfield_get_type(dfield2)->mtype == DATA_MISSING
 			      || (!(dfield_get_type(dfield2)->prtype
@@ -279,7 +280,7 @@ row_build_index_entry_low(
 		}
 
 		len = dfield_get_len(dfield2);
-
+                // 把更新字段的内容复制到原字段
 		dfield_copy(dfield, dfield2);
 
 		if (dfield_is_null(dfield)) {

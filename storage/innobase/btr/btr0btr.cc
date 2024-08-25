@@ -1330,12 +1330,12 @@ btr_page_reorganize_low(
 
 	/* Recreate the page: note that global data on page (possible
 	segment headers, next page-field, etc.) is preserved intact */
-
+        // 调用page_create()方法重新初始化当前页
 	page_create(block, mtr, dict_table_is_comp(index->table), is_spatial);
 
 	/* Copy the records from the temporary space to the recreated page;
 	do not copy the lock bits yet */
-
+        // 然后再把临时页中的记录复制到当前页
 	page_copy_rec_list_end_no_locks(block, temp_block,
 					page_get_infimum_rec(temp_page),
 					index, mtr);
@@ -2917,6 +2917,7 @@ insert_empty:
 	/* 8. If insert did not fit, try page reorganization.
 	For compressed pages, page_cur_tuple_insert() will have
 	attempted this already. */
+        // 如果一开始在新页没插入成功，那就进行页面重组
 
 	if (page_cur_get_page_zip(page_cursor)
 	    || !btr_page_reorganize(page_cursor, cursor->index, mtr)) {

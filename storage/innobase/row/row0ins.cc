@@ -403,6 +403,7 @@ row_ins_clust_index_entry_by_modify(
 
 		big_rec_t*	big_rec	= NULL;
 
+                // 悲观更新
 		err = btr_cur_pessimistic_update(
 			flags | BTR_KEEP_POS_FLAG,
 			cursor, offsets, offsets_heap, heap,

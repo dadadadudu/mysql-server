@@ -470,7 +470,7 @@ row_upd_changes_field_size_or_external(
 
 			old_len = UNIV_SQL_NULL;
 		}
-
+                // 比较大小是不是不相等
 		if (dfield_is_ext(new_val) || old_len != new_len
 		    || rec_offs_nth_extern(offsets, upd_field->field_no)) {
 
@@ -2108,7 +2108,7 @@ row_upd_store_row(
 		ext = NULL;
 		node->ext = NULL;
 	}
-
+        //
 	node->row = row_build(ROW_COPY_DATA, clust_index, rec, offsets,
 			      NULL, NULL, NULL, ext, node->heap);
 
@@ -2535,11 +2535,12 @@ row_upd_clust_rec_by_insert(
 	btr_cur	= btr_pcur_get_btr_cur(pcur);
 
 	heap = mem_heap_create(1000);
-
+        // 构造插入的的记录
 	entry = row_build_index_entry_low(node->upd_row, node->upd_ext,
 					  index, heap, ROW_BUILD_FOR_INSERT);
 	ut_ad(dtuple_get_info_bits(entry) == 0);
 
+        // 设置entry的trx_id
 	row_upd_index_entry_sys_field(entry, index, DATA_TRX_ID, trx->id);
 
 	switch (node->state) {
@@ -2571,7 +2572,7 @@ row_upd_clust_rec_by_insert(
 							   offsets)));
 			goto check_fk;
 		}
-
+                // 删除记录， 更新记录的delete mark，生成undolog, 更新记录的trx_id、rollpoint
 		err = btr_cur_del_mark_set_clust_rec(
 			flags, btr_cur_get_block(btr_cur), rec, index, offsets,
 			thr, node->row, mtr);
@@ -2615,7 +2616,7 @@ check_fk:
 	}
 
 	mtr_commit(mtr);
-
+        // 插入记录
 	err = row_ins_clust_index_entry(
 		index, entry, thr,
 		entry->get_n_ext(), false);
@@ -2673,11 +2674,13 @@ row_upd_clust_rec(
 	record to update */
 
 	if (node->cmpl_info & UPD_NODE_NO_SIZE_CHANGE) {
+                // 更新前后没有大小变化，所以比较简单
 		err = btr_cur_update_in_place(
 			flags | BTR_NO_LOCKING_FLAG, btr_cur,
 			offsets, node->update,
 			node->cmpl_info, thr, thr_get_trx(thr)->id, mtr);
 	} else {
+                // 乐观更新，如果空闲空间不够就会在下面进行悲观更新
 		err = btr_cur_optimistic_update(
 			flags | BTR_NO_LOCKING_FLAG, btr_cur,
 			&offsets, offsets_heap, node->update,
@@ -2728,7 +2731,7 @@ row_upd_clust_rec(
 	if (!heap) {
 		heap = mem_heap_create(1024);
 	}
-
+        // 悲观更新
 	err = btr_cur_pessimistic_update(
 		flags | BTR_NO_LOCKING_FLAG | BTR_KEEP_POS_FLAG, btr_cur,
 		&offsets, offsets_heap, heap, &big_rec,
@@ -2852,11 +2855,11 @@ row_upd_clust_step(
 	ulint		flags	= 0;
 	trx_t*		trx = thr_get_trx(thr);
 	rec_offs_init(offsets_);
-
+        // 拿到表的聚集索引
 	index = dict_table_get_first_index(node->table);
-
+        // 检查外键关系，不用管
 	referenced = row_upd_index_is_referenced(index, trx);
-
+        // 指向要更新的记录
 	pcur = node->pcur;
 
 	/* We have to restore the cursor to its position */
@@ -2892,7 +2895,7 @@ row_upd_clust_step(
 	DEBUG_SYNC_C_IF_THD(
 		thr_get_trx(thr)->mysql_thd,
 		"innodb_row_upd_clust_step_enter");
-
+        // 索引是不是处于online_ddl
 	if (dict_index_is_online_ddl(index)) {
 		ut_ad(node->table->id != DICT_INDEXES_ID);
 		mode = BTR_MODIFY_LEAF | BTR_ALREADY_S_LATCHED;
@@ -2937,7 +2940,7 @@ row_upd_clust_step(
 			return(err);
 		}
 	}
-
+        // 待更新的记录地址
 	rec = btr_pcur_get_rec(pcur);
 	offsets = rec_get_offsets(rec, index, offsets_,
 				  ULINT_UNDEFINED, &heap);
@@ -2957,7 +2960,7 @@ row_upd_clust_step(
 				      page_rec_get_heap_no(rec)));
 
 	/* NOTE: the following function calls will also commit mtr */
-
+        // delete操作其实就是更新，只是更新的是记录的delete mark
 	if (node->is_delete) {
 		err = row_upd_del_mark_clust_rec(
 			flags, node, index, offsets, thr, referenced, &mtr);
@@ -2980,17 +2983,18 @@ row_upd_clust_step(
 				     UT_LIST_GET_FIRST(node->columns));
 		row_upd_eval_new_vals(node->update);
 	}
-
+        // 如果更新字段不需要更新二级索引，或者更新的是聚集索引上的非索引字段，比如主键是id，如果更新name字段，name就是非索引字段，更新name不会影响到索引B+树的排序
 	if (node->cmpl_info & UPD_NODE_NO_ORD_CHANGE) {
-
+                // 更新聚集索引上的普通字段
 		err = row_upd_clust_rec(
 			flags, node, index, offsets, &heap, thr, &mtr);
 		goto exit_func;
 	}
 
+        // 把更新之前的记录内容存在node->row，把更新之后的记录内容存在node->upd_row
 	row_upd_store_row(node, trx->mysql_thd,
 			  thr->prebuilt ? thr->prebuilt->m_mysql_table : NULL);
-
+        // 如果更新的是排序字段，也就是索引键，那么就是先把当前记录删除掉，把新记录插入进来
 	if (row_upd_changes_ord_field_binary(index, node->update, thr,
 					     node->row, node->ext)) {
 
@@ -3004,7 +3008,7 @@ row_upd_clust_step(
 		read operation must check the undo record undo number when
 		choosing records to update. MySQL solves now the problem
 		externally! */
-
+                // 先删掉当前记录，再新增新记录
 		err = row_upd_clust_rec_by_insert(
 			flags, node, index, thr, referenced, &mtr);
 
@@ -3015,6 +3019,7 @@ row_upd_clust_step(
 
 		node->state = UPD_NODE_UPDATE_ALL_SEC;
 	} else {
+                // 更新普通记录
 		err = row_upd_clust_rec(
 			flags, node, index, offsets, &heap, thr, &mtr);
 
@@ -3080,6 +3085,8 @@ row_upd(
 		if (!dict_table_is_intrinsic(node->table)) {
 			log_free_check();
 		}
+
+                // 更新聚集索引
 		err = row_upd_clust_step(node, thr);
 
 		if (err != DB_SUCCESS) {
@@ -3099,7 +3106,7 @@ row_upd(
 	}
 
 	DBUG_EXECUTE_IF("row_upd_skip_sec", node->index = NULL;);
-
+        // 更新其他索引上的数据
 	do {
 		/* Skip corrupted index */
 		dict_table_skip_corrupt_index(node->index);
@@ -3109,6 +3116,8 @@ row_upd(
 		}
 
 		if (node->index->type != DICT_FTS) {
+
+                        // 更新操作
 			err = row_upd_sec_step(node, thr);
 
 			if (err != DB_SUCCESS) {

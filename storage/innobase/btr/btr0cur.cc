@@ -2366,11 +2366,12 @@ btr_cur_open_at_index_side_func(
 				}
 			}
 		}
-                // 开始遍历
+
 		if (from_left) {
-			// page_cursor指向block对应page中的最小记录页
+                        // 需要从叶子左边开始遍历，也就是升序遍历，page_cursor指向当前页的最小记录
                         page_cur_set_before_first(block, page_cursor);
 		} else {
+                        // 需要从叶子右边开始遍历，也就是降序序遍历，page_cursor执行当前页的最大记录
 			page_cur_set_after_last(block, page_cursor);
 		}
 
@@ -2386,8 +2387,10 @@ btr_cur_open_at_index_side_func(
 		ut_ad(height > 0);
 
 		if (from_left) {
+                        // page_cursor执行最小记录的下一条记录
 			page_cur_move_to_next(page_cursor);
 		} else {
+                        // page_cursor指向最大记录的前一条记录
 			page_cur_move_to_prev(page_cursor);
 		}
 
@@ -2397,6 +2400,7 @@ btr_cur_open_at_index_side_func(
 
 		height--;
 
+                // node_ptr表示指向的孩子节点的指针
 		node_ptr = page_cur_get_rec(page_cursor);
 		offsets = rec_get_offsets(node_ptr, cursor->index, offsets,
 					  ULINT_UNDEFINED, &heap);
@@ -2471,6 +2475,7 @@ btr_cur_open_at_index_side_func(
 		}
 
 		/* Go to the child node */
+                // 获取node_ptr执行的page_no
 		page_id.set_page_no(
 			btr_node_ptr_get_child_page_no(node_ptr, offsets));
 
@@ -3846,7 +3851,7 @@ btr_cur_update_in_place(
 		btr_cur_update_alloc_zip(). */
 		goto func_exit;
 	}
-
+        // 更新系统字段
 	if (!(flags & BTR_KEEP_SYS_FLAG)
 	    && !dict_table_is_intrinsic(index->table)) {
 		row_upd_rec_sys_fields(rec, NULL, index, offsets,
@@ -3989,7 +3994,7 @@ btr_cur_optimistic_update(
 	ut_a(!rec_offs_any_null_extern(rec, *offsets)
 	     || trx_is_recv(thr_get_trx(thr)));
 #endif /* UNIV_DEBUG || UNIV_BLOB_LIGHT_DEBUG */
-
+        // 检查记录对应的更新字段在更新前后的大小是否发生了变化，如果没有变化，那就可以直接更新了
 	if (!row_upd_changes_field_size_or_external(index, *offsets, update)) {
 
 		/* The simplest and the most common case: the update does not
@@ -4078,7 +4083,7 @@ any_extern:
 		err = DB_OVERFLOW;
 		goto func_exit;
 	}
-
+        // 计算更新之后当前页中的数据大小，如果太小了则会尝试将当前页的内容合并到兄弟页
 	if (UNIV_UNLIKELY(page_get_data_size(page)
 			  - old_rec_size + new_rec_size
 			  < BTR_CUR_PAGE_COMPRESS_LIMIT(index))) {
@@ -4138,7 +4143,7 @@ any_extern:
 	}
 
 	btr_search_update_hash_on_delete(cursor);
-
+        // 删除当前记录
 	page_cur_delete_rec(page_cursor, index, *offsets, mtr);
 
 	page_cur_move_to_prev(page_cursor);
@@ -4152,6 +4157,7 @@ any_extern:
 	}
 
 	/* There are no externally stored columns in new_entry */
+        // 插入新记录
 	rec = btr_cur_insert_if_possible(
 		cursor, new_entry, offsets, heap, 0/*n_ext*/, mtr);
 	ut_a(rec); /* <- We calculated above the insert would fit */
@@ -4307,7 +4313,7 @@ btr_cur_pessimistic_update(
 	      || (flags & ~BTR_KEEP_POS_FLAG)
 	      == (BTR_NO_UNDO_LOG_FLAG | BTR_NO_LOCKING_FLAG
 		  | BTR_CREATE_FLAG | BTR_KEEP_SYS_FLAG));
-
+        // 也是先进行一次乐观更新
 	err = optim_err = btr_cur_optimistic_update(
 		flags | BTR_KEEP_IBUF_BITMAP,
 		cursor, offsets, offsets_heap, update,
@@ -4476,7 +4482,7 @@ btr_cur_pessimistic_update(
 	ut_a(!page_zip || page_zip_validate(page_zip, page, index));
 #endif /* UNIV_ZIP_DEBUG */
 	page_cursor = btr_cur_get_page_cur(cursor);
-
+        // 先删除记录
 	page_cur_delete_rec(page_cursor, index, *offsets, mtr);
 
 	page_cur_move_to_prev(page_cursor);
@@ -4580,7 +4586,7 @@ btr_cur_pessimistic_update(
 	btr_cur_upd_lock_and_undo(). We do not try
 	btr_cur_optimistic_insert() because
 	btr_cur_insert_if_possible() already failed above. */
-
+        // btr_cur_insert_if_possible()失败了就直接执行悲观插入
 	err = btr_cur_pessimistic_insert(BTR_NO_UNDO_LOG_FLAG
 					 | BTR_NO_LOCKING_FLAG
 					 | BTR_KEEP_SYS_FLAG,
@@ -4838,7 +4844,7 @@ btr_cur_del_mark_set_clust_rec(
 	and the delete-mark is being updated in place. */
 
 	page_zip = buf_block_get_page_zip(block);
-
+        // 设置delete mark
 	btr_rec_set_deleted_flag(rec, page_zip, TRUE);
 
 	/* For intrinsic table, roll-ptr is not maintained as there is no UNDO

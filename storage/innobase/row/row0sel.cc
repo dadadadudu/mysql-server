@@ -4681,10 +4681,10 @@ row_search_mvcc(
 {
 	DBUG_ENTER("row_search_mvcc");
 
-	dict_index_t*	index		= prebuilt->index;
+	dict_index_t*	index		= prebuilt->index;  // 查询哪个索引
 	ibool		comp		= dict_table_is_comp(index->table);
-	const dtuple_t*	search_tuple	= prebuilt->search_tuple;
-	btr_pcur_t*	pcur		= prebuilt->pcur;
+	const dtuple_t*	search_tuple	= prebuilt->search_tuple;   // 可以用来在索引上进行搜索的字段和对应值，比如id字段和指定的值
+	btr_pcur_t*	pcur		= prebuilt->pcur;     // 指向上一条查询结果记录
 	trx_t*		trx		= prebuilt->trx;
 	dict_index_t*	clust_index;
 	que_thr_t*	thr;
@@ -5269,7 +5269,7 @@ wait_table_again:
                 // select * from user_info; mode为PAGE_CUR_G
                 // select * from user_info order by id desc; mode为PAGE_CUR_L
 
-		// 注意第一个参数，为PAGE_CUR_G表示定位在index的最左边记录，否则定位在index的最右边记录
+		// PAGE_CUR_G会指向B+树中叶子节点的最左边页的中的最小记录，PAGE_CUR_G则指向B+树中叶子节点的最右边页的中的最大记录
                 btr_pcur_open_at_index_side(
 			mode == PAGE_CUR_G, index, BTR_SEARCH_LEAF,
 			pcur, false, 0, &mtr);
@@ -5287,7 +5287,7 @@ rec_loop:
 
 	/*-------------------------------------------------------------*/
 	/* PHASE 4: Look for matching records in a loop */
-        // 获取pcur指向的记录，执行符合查询条件的第一条记录
+        // 获取pcur指向的记录
 	rec = btr_pcur_get_rec(pcur);
 
 	ut_ad(!!page_rec_is_comp(rec) == comp);
@@ -5500,7 +5500,7 @@ wrong_offs:
 		in prebuilt: if not, then we return with DB_RECORD_NOT_FOUND */
 
 		/* fputs("Comparing rec and search tuple\n", stderr); */
-
+                // 如果search_tuple和rec不相等
 		if (0 != cmp_dtuple_rec(search_tuple, rec, offsets)) {
 
 			if (set_also_gap_locks

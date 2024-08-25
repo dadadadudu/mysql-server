@@ -996,15 +996,15 @@ page_rec_get_prev_const(
 	page = page_align(rec);
 
 	ut_ad(!page_rec_is_infimum(rec));
-
+        // 根据记录找到slot的编号
 	slot_no = page_dir_find_owner_slot(rec);
 
 	ut_a(slot_no != 0);
-
+        // 获取上一个槽
 	slot = page_dir_get_nth_slot(page, slot_no - 1);
-
+        // 得到上一个槽执行的的记录，也就是上一个槽对应的组的第一条记录
 	rec2 = page_dir_slot_get_rec(slot);
-
+        // 然后遍历rec2的下一条记录，看哪条记录的的next等于rec，那么这条记录就是rec的前一条记录
 	if (page_is_comp(page)) {
 		while (rec != rec2) {
 			prev_rec = rec2;
