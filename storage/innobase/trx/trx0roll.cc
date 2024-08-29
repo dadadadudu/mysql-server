@@ -184,7 +184,7 @@ trx_rollback_for_mysql_low(
 	then the transaction object does not have an InnoDB session
 	object, and we set a dummy session that we use for all MySQL
 	transactions. */
-
+        // 核心方法
 	trx_rollback_to_savepoint_low(trx, NULL);
 
 	trx->op_info = "";
@@ -217,6 +217,8 @@ trx_rollback_low(
 	case TRX_STATE_ACTIVE:
 		ut_ad(trx->in_mysql_trx_list);
 		assert_trx_nonlocking_or_in_list(trx);
+
+                // 核心方法
 		return(trx_rollback_for_mysql_low(trx));
 
 	case TRX_STATE_PREPARED:

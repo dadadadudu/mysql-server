@@ -1257,6 +1257,7 @@ sel_set_rec_lock(
 	}
 
 	if (dict_index_is_clust(index)) {
+                // 聚集索引
 		err = lock_clust_rec_read_check_and_lock(
 			0, block, rec, index, offsets,
 			static_cast<lock_mode>(mode), type, thr);
@@ -1272,6 +1273,7 @@ sel_set_rec_lock(
 			err = sel_set_rtr_rec_lock(pcur, rec, index, offsets,
 						   mode, type, thr, mtr);
 		} else {
+                        // 辅助索引
 			err = lock_sec_rec_read_check_and_lock(
 				0, block, rec, index, offsets,
 				static_cast<lock_mode>(mode), type, thr);
@@ -5071,7 +5073,7 @@ row_search_mvcc(
 	      || prebuilt->select_lock_type != LOCK_NONE
 	      || MVCC::is_view_active(trx->read_view)
 	      || srv_read_only_mode);
-
+        // 开启事务
 	trx_start_if_not_started(trx, false);
         // 如果隔离级别是读未提交或读已提交，不用加gap锁
 	if (trx->isolation_level <= TRX_ISO_READ_COMMITTED
@@ -5592,7 +5594,7 @@ wrong_offs:
 
 	/* We are ready to look at a possible new index entry in the result
 	set: the cursor is now placed on a user record */
-
+        // update的时候select_lock_type为3，也就是LOCK_X
 	if (prebuilt->select_lock_type != LOCK_NONE) {
 		/* Try to place a lock on the index record; note that delete
 		marked records are a special case in a unique search. If there
@@ -5605,7 +5607,7 @@ wrong_offs:
 		not used. */
 
 		ulint	lock_type;
-                // 唯一索引的等值查询unique_search=true，此时加的是LOCK_REC_NOT_GAP
+                // no_gap_lock流程中加的是LOCK_REC_NOT_GAP，也就是只锁当前行，不锁行前面的间隙
 		if (!set_also_gap_locks
 		    || srv_locks_unsafe_for_binlog
 		    || trx->isolation_level <= TRX_ISO_READ_COMMITTED

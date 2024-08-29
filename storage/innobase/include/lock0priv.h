@@ -739,7 +739,7 @@ public:
 		m_rec_id(block, heap_no)
 	{
 		btr_assert_not_corrupted(block, index);
-
+                // 初始化m_size，m_size对应的字节是用来记录当前页哪些行加了当前mode类型的锁的
 		init(block->frame);
 	}
 
@@ -895,6 +895,7 @@ private:
 		      || !dict_index_is_online_ddl(m_index));
 		ut_ad(m_thr == NULL || m_trx == thr_get_trx(m_thr));
 
+                // 会根据当前页中的有多少行记录来计算m_size，单位是字节，当然会额外多给一点，防止记录变多
 		m_size = is_predicate_lock(m_mode)
 			  ? lock_size(m_mode) : lock_size(page);
 
@@ -902,7 +903,7 @@ private:
 		/** If rec is the supremum record, then we reset the
 		gap and LOCK_REC_NOT_GAP bits, as all locks on the
 		supremum are automatically of the gap type */
-                // 如果要加锁的行是SUPREMUM
+                // 如果要加锁的行是SUPREMUM，那么只需要加LOCK_GAP锁，锁最大记录是没有意义的
 		if (m_rec_id.m_heap_no == PAGE_HEAP_NO_SUPREMUM) {
 			ut_ad(!(m_mode & LOCK_REC_NOT_GAP));
 

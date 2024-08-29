@@ -3598,7 +3598,9 @@ int handler::update_auto_increment()
         else
           nb_desired_values= AUTO_INC_DEFAULT_NB_MAX;
       }
+
       /* This call ignores all its parameters but nr, currently */
+      // 获取自增值
       get_auto_increment(variables->auto_increment_offset,
                          variables->auto_increment_increment,
                          nb_desired_values, &nr,

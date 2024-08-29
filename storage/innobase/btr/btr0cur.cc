@@ -2975,6 +2975,7 @@ btr_cur_ins_lock_and_undo(
 				index, thr, mtr, &prdt);
 			*inherit = false;
 		} else {
+                        // 加锁
 			err = lock_rec_insert_check_and_lock(
 				flags, rec, btr_cur_get_block(cursor),
 				index, thr, mtr, inherit);
@@ -3216,6 +3217,7 @@ fail_err:
 		} else {
 			/* Check locks and write to the undo log,
 			if specified */
+                        // 会进行锁检查和undo log的记录，如果发现需要阻塞等待其他事务锁的释放就会加锁，如果发现insert不需要加锁，
 			err = btr_cur_ins_lock_and_undo(flags, cursor, entry,
 							thr, mtr, &inherit);
 

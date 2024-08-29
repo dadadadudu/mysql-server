@@ -1461,7 +1461,7 @@ trx_start_low(
 
 				trx_sys_mutex_exit();
 			}
-
+                        // 设置状态为活跃状态
 			trx->state = TRX_STATE_ACTIVE;
 
 		} else {

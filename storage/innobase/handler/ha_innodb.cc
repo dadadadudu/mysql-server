@@ -4570,7 +4570,7 @@ innobase_rollback(
 
 	if (rollback_trx
 	    || !thd_test_options(thd, OPTION_NOT_AUTOCOMMIT | OPTION_BEGIN)) {
-
+                // 核心方法
 		error = trx_rollback_for_mysql(trx);
 
 		if (trx->state == TRX_STATE_FORCED_ROLLBACK) {
@@ -16725,7 +16725,7 @@ ha_innobase::innobase_get_autoinc(
 	ulonglong*	value)		/*!< out: autoinc value */
 {
 	*value = 0;
-
+        // 加自增锁
 	m_prebuilt->autoinc_error = innobase_lock_autoinc();
 
 	if (m_prebuilt->autoinc_error == DB_SUCCESS) {
@@ -16795,7 +16795,7 @@ ha_innobase::get_auto_increment(
 
 	/* Prepare m_prebuilt->trx in the table handle */
 	update_thd(ha_thd());
-
+        // 获取自增值
 	error = innobase_get_autoinc(&autoinc);
 
 	if (error != DB_SUCCESS) {
