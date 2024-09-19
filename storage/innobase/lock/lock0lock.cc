@@ -424,11 +424,14 @@ lock_sec_rec_cons_read_sees(
 
 		return(true);
 	}
-
+        // 当前页上最大的事务id
 	trx_id_t	max_trx_id = page_get_max_trx_id(page_align(rec));
 
 	ut_ad(max_trx_id > 0);
-
+        // readview中记录最小的活跃事务id大于max_trx_id，那么就表示这个readview对当前页可见，可以直接返回对应记录，否则表示当前readview对当前页并不可见，需要根据记录回表去聚集索引上确定记录的可见性
+        // 因为辅助索引上的记录并不会记录undolog，只能说如果发现辅助索引页上的max_trx_id小于readview中的最小事务id，那么就表示当前事务对当前辅助索引上的记录都可见
+        // 但是一旦发现辅助索引页上的max_trx_id大于或等于readview中的最小事务id，那么就表示当前页中有记录是当前事务readview不可见的，但是具体是哪条是不知道的，此时需要回表找到聚集索引上的记录判断对当前readview的可见性
+        // 辅助索引记录中是没有记录事务id的
 	return(view->sees(max_trx_id));
 }
 
@@ -1494,7 +1497,7 @@ RecLock::lock_alloc(
 	if (is_predicate_lock(mode)) {
 
 		rec_lock.n_bits = 8;
-                // lock[1]表示lock数组或元组的第二个元素，1表示一个字节
+
 		memset(&lock[1], 0x0, 1);
 
 	} else {
@@ -1502,7 +1505,7 @@ RecLock::lock_alloc(
 
                 // size表示字节
 		rec_lock.n_bits = static_cast<uint32_t>(8 * size);
-
+                // 初始化lock_t对象后面的size个字节的内容为0
 		memset(&lock[1], 0x0, size);
 	}
 

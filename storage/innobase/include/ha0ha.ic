@@ -176,7 +176,9 @@ ha_search_and_get_data(
 {
 	hash_assert_can_search(table, fold);
 	ut_ad(btr_search_enabled);
-
+        // 根据fold，fold就是tuple对应的哈希值
+        // table是索引对应的hash table，每个索引对应一个hash table
+        // 根据fold获取hash table中对应位置链表中的头节点，然后遍历链表
 	for (const ha_node_t* node = ha_chain_get_first(table, fold);
 	     node != NULL;
 	     node = ha_chain_get_next(node)) {

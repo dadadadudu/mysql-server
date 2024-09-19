@@ -1722,7 +1722,7 @@ row_insert_for_mysql_using_ins_graph(
 
 	row_get_prebuilt_insert_row(prebuilt);
 	node = prebuilt->ins_node;
-
+        // 把mysql中的一行转成innodb中的一行
 	row_mysql_convert_row_to_innobase(node->row, prebuilt, mysql_rec,
 					  &blob_heap);
 

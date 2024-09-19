@@ -137,7 +137,7 @@ ut_align_offset(
 	ut_ad(ptr);
 
 	ut_ad(sizeof(void*) == sizeof(ulint));
-
+        // 相当于指针的十进制 % 16384
 	return(((ulint) ptr) & (align_no - 1));
 }
 

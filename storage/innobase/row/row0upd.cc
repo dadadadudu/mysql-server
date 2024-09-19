@@ -3097,7 +3097,7 @@ row_upd(
 
 	DEBUG_SYNC_C_IF_THD(thr_get_trx(thr)->mysql_thd,
 			    "after_row_upd_clust");
-
+        // 本次update没有数据修改，不需要更新其他辅助索引
 	if (node->index == NULL
 	    || (!node->is_delete
 		&& (node->cmpl_info & UPD_NODE_NO_ORD_CHANGE))) {

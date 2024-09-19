@@ -156,7 +156,7 @@ btr_search_check_free_space_in_heap(dict_index_t* index)
 
 	ut_ad(!rw_lock_own(btr_get_search_latch(index), RW_LOCK_S));
 	ut_ad(!rw_lock_own(btr_get_search_latch(index), RW_LOCK_X));
-
+        // 获取index对应的hash_table_t，所谓的AHI就是一个hash_table_t，hash_table_t中有一个hash_cell_t数组
 	table = btr_get_search_table(index);
 
 	heap = table->heap;
@@ -470,9 +470,9 @@ btr_search_info_update_hash(
 
 		return;
 	}
-
+        // 唯一索引的字段个数
 	n_unique = dict_index_get_n_unique_in_tree(index);
-
+        // 对search info进行初始化
 	if (info->n_hash_potential == 0) {
 
 		goto set_new_recomm;
@@ -480,7 +480,7 @@ btr_search_info_update_hash(
 
 	/* Test if the search would have succeeded using the recommended
 	hash prefix */
-
+        // 判断当前条件是不是和info中记录的匹配
 	if (info->n_fields >= n_unique && cursor->up_match >= n_unique) {
 increment_potential:
 		info->n_hash_potential++;
@@ -615,11 +615,11 @@ btr_search_update_block_hash_info(
 		block->n_hash_helps = 0;
 	}
 #endif /* UNIV_DEBUG */
-
+        // n_hash_helps表示block对应的页被使用的次数，n_hash_potential表示某个search info被连续使用的次数
 	if ((block->n_hash_helps > page_get_n_recs(block->frame)
 	     / BTR_SEARCH_PAGE_BUILD_LIMIT)
 	    && (info->n_hash_potential >= BTR_SEARCH_BUILD_LIMIT)) {
-
+                // block->index指的是AHI
 		if ((!block->index)
 		    || (block->n_hash_helps
 			> 2 * page_get_n_recs(block->frame))
@@ -721,20 +721,20 @@ btr_search_info_update_slow(
 
 	ut_ad(!rw_lock_own(btr_get_search_latch(cursor->index), RW_LOCK_S));
 	ut_ad(!rw_lock_own(btr_get_search_latch(cursor->index), RW_LOCK_X));
-
+        // 从B+树中定位到的某页
 	block = btr_cur_get_block(cursor);
 
 	/* NOTE that the following two function calls do NOT protect
 	info or block->n_fields etc. with any semaphore, to save CPU time!
 	We cannot assume the fields are consistent when we return from
 	those functions! */
-
+        // 会更新info->n_hash_potential，用来记录search info被用到的次数，一个索引只有一个search info，只有再连续使用时才会加1
 	btr_search_info_update_hash(info, cursor);
-
+        // 判断当前需不需要对当前block进行自适应哈希索引的创建
 	build_index = btr_search_update_block_hash_info(info, block, cursor);
 
 	if (build_index || (cursor->flag == BTR_CUR_HASH_FAIL)) {
-
+                // cursor->index指的才是通常的index，
 		btr_search_check_free_space_in_heap(cursor->index);
 	}
 
@@ -751,7 +751,7 @@ btr_search_info_update_slow(
 
 		btr_search_x_unlock(cursor->index);
 	}
-
+        // 构建或更新index对应的AHI
 	if (build_index) {
 		/* Note that since we did not protect block->n_fields etc.
 		with any semaphore, the values can be inconsistent. We have
@@ -1013,7 +1013,7 @@ btr_search_guess_on_hash(
 
 	ut_ad(rw_lock_get_writer(btr_get_search_latch(index)) != RW_LOCK_X);
 	ut_ad(rw_lock_get_reader_count(btr_get_search_latch(index)) > 0);
-
+        // hash搜索，btr_get_search_table(index)获取索引对应的hash table
 	rec = (rec_t*) ha_search_and_get_data(
 			btr_get_search_table(index), fold);
 
@@ -1027,7 +1027,7 @@ btr_search_guess_on_hash(
 
 		return(FALSE);
 	}
-
+        // 根据记录找到记录所在的页
 	buf_block_t*	block = buf_block_from_ahi(rec);
 
 	if (!has_search_latch) {
@@ -1049,7 +1049,7 @@ btr_search_guess_on_hash(
 
 		buf_block_dbg_add_level(block, SYNC_TREE_NODE_FROM_HASH);
 	}
-
+        // AHI中缓存的页必须缓存在了buffer pool中
 	if (buf_block_get_state(block) != BUF_BLOCK_FILE_PAGE) {
 
 		ut_ad(buf_block_get_state(block) == BUF_BLOCK_REMOVE_HASH);
@@ -1443,9 +1443,9 @@ btr_search_build_page_hash_index(
 	ut_ad(!rw_lock_own(btr_get_search_latch(index), RW_LOCK_X));
 	ut_ad(rw_lock_own(&(block->lock), RW_LOCK_S)
 	      || rw_lock_own(&(block->lock), RW_LOCK_X));
-
+        // 根据index获取对应的btr_search_sys->hash_tables数组中的分段锁，因为接下来要修改数组中的该位置的内容
 	btr_search_s_lock(index);
-
+        // 获取btr_search_sys->hash_tables数组中index对应的hash_table_t，也就是index对应的AHI
 	table = btr_get_search_table(index);
 	page = buf_block_get_frame(block);
 
@@ -1471,7 +1471,7 @@ btr_search_build_page_hash_index(
 	    < btr_search_get_n_fields(n_fields, n_bytes)) {
 		return;
 	}
-
+        // 页面中有没有记录，有记录才缓存
 	n_recs = page_get_n_recs(page);
 
 	if (n_recs == 0) {
@@ -1481,7 +1481,7 @@ btr_search_build_page_hash_index(
 
 	/* Calculate and cache fold values and corresponding records into
 	an array for fast insertion to the hash index */
-
+        // 页面中有多少记录
 	folds = (ulint*) ut_malloc_nokey(n_recs * sizeof(ulint));
 	recs = (rec_t**) ut_malloc_nokey(n_recs * sizeof(rec_t*));
 
@@ -1497,7 +1497,8 @@ btr_search_build_page_hash_index(
 		&heap);
 	ut_ad(page_rec_is_supremum(rec)
 	      || n_fields + (n_bytes > 0) == rec_offs_n_fields(offsets));
-
+        // 第一条记录对应的哈希值，根据记录内容+当前匹配到该记录时的条件，n_fields表示命中了index中的几个字段，n_bytes表示最后一个没命中字段命中了多少个字节
+        // 比如n_fields为2，那就取rec中前两个字段的内容来进行哈希，如果n_bytes为8，那就继续取第3个字段的前8个字节进行哈希，最终得到一个哈希值
 	fold = rec_fold(rec, offsets, n_fields, n_bytes, index->id);
 
 	if (left_side) {
@@ -1506,7 +1507,7 @@ btr_search_build_page_hash_index(
 		recs[n_cached] = rec;
 		n_cached++;
 	}
-
+        // 遍历页中的所有记录
 	for (;;) {
 		next_rec = page_rec_get_next(rec);
 
@@ -1548,7 +1549,7 @@ btr_search_build_page_hash_index(
 	}
 
 	btr_search_check_free_space_in_heap(index);
-
+        // 分段排他锁
 	btr_search_x_lock(index);
 
 	if (!btr_search_enabled) {
@@ -1577,9 +1578,9 @@ btr_search_build_page_hash_index(
 	block->curr_n_bytes = n_bytes;
 	block->curr_left_side = left_side;
 	block->index = index;
-
+        // 针对某一页建立AHI，实际上就是把该页中的每条记录，按当前的匹配条件字段取出每条记录对应的值作为key，page和rec做为value，这个映射关系给存起来，这样当再使用同样的查询时就可以直接获取对应的page和rec了
 	for (i = 0; i < n_cached; i++) {
-
+                // recs[i]会组成hash_cell_t，folds[i]决定了hash_cell_t存在table中的第一个槽位
 		ha_insert_for_fold(table, folds[i], block, recs[i]);
 	}
 

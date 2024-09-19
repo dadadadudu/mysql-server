@@ -3673,7 +3673,7 @@ row_sel_get_clust_rec_for_mysql(
 
 		/* If the isolation level allows reading of uncommitted data,
 		then we never look for an earlier version */
-
+                // readview检查可见性
 		if (trx->isolation_level > TRX_ISO_READ_UNCOMMITTED
 		    && !lock_clust_rec_cons_read_sees(
 			    clust_rec, clust_index, *offsets,
@@ -4935,7 +4935,7 @@ row_search_mvcc(
 	cannot use the adaptive hash index in a search in the case the row
 	may be long and there may be externally stored fields */
 
-        // 最后一个条件!prebuilt->innodb_api)一般不会满足
+
 	if (UNIV_UNLIKELY(direction == 0)
 	    && unique_search
 	    && btr_search_enabled
@@ -6774,7 +6774,7 @@ row_search_max_autoinc(
 		const rec_t*	rec;
 
 		mtr_start(&mtr);
-
+                // 获取索引上的最大记录
 		rec = row_search_get_max_rec(index, &mtr);
 
 		if (rec != NULL) {

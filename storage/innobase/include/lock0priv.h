@@ -120,7 +120,10 @@ struct lock_t {
 					lock */
 	UT_LIST_NODE_T(lock_t)
 			trx_locks;	/*!< list of the locks of the
-					transaction */
+					transaction  这个属性是一个链表的基节点，链表基节点会执行链表的头节点和尾节点，以及记录链表的长度，而该链表表示当前事务加了哪些锁，
+					会把对应的lock_t对象组成一个链表，利用该属性每个lock_t对象都可以很容易找到当前事务中其他的锁信息，
+					比如事务提交时要释放锁，释放掉事务的第一个锁之后，就可以立马找到事务中存在的第二个锁进行释放
+					*/
 
 	dict_index_t*	index;		/*!< index for a record lock */
 
@@ -131,7 +134,7 @@ struct lock_t {
 	union {
 		lock_table_t	tab_lock;/*!< table lock */
 		lock_rec_t	rec_lock;/*!< record lock */
-	} un_member;			/*!< lock details */
+	} un_member;			/*!< lock details 只能二选一*/
 
 	ib_uint32_t	type_mode;	/*!< lock type, mode, LOCK_GAP or
 					LOCK_REC_NOT_GAP,

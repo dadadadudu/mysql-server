@@ -1594,9 +1594,9 @@ rec_copy(
 
 	extra_len = rec_offs_extra_size(offsets);
 	data_len = rec_offs_data_size(offsets);
-
+        // 把rec的内容复制到buf
 	ut_memcpy(buf, rec - extra_len, extra_len + data_len);
-
+        // 指向记录的中间
 	return((byte*) buf + extra_len);
 }
 

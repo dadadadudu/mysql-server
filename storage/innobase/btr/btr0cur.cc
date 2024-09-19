@@ -1915,6 +1915,7 @@ need_opposite_intention:
 		btr_search_build_page_hash_index() before building a
 		page hash index, while holding search latch. */
 		if (btr_search_enabled && !index->disable_ahi) {
+                        // 主要是更新AHI中的信息
 			btr_search_info_update(index, cursor);
 		}
 		ut_ad(cursor->up_match != ULINT_UNDEFINED
@@ -2981,7 +2982,7 @@ btr_cur_ins_lock_and_undo(
 				index, thr, mtr, inherit);
 		}
 	}
-
+        // 非聚集索引不会生成undo log
 	if (err != DB_SUCCESS
 	    || !dict_index_is_clust(index) || dict_index_is_ibuf(index)) {
 

@@ -1391,7 +1391,7 @@ page_cur_insert_rec_low(
 #endif /* UNIV_DEBUG_VALGRIND */
 
 	/* 2. Try to find suitable space from page memory management */
-
+        // 查看FREE链表中的被删除的记录
 	free_rec = page_header_get_ptr(page, PAGE_FREE);
 	if (UNIV_LIKELY_NULL(free_rec)) {
 		/* Try to allocate from the head of the free list. */
@@ -1400,21 +1400,26 @@ page_cur_insert_rec_low(
 		mem_heap_t*	heap		= NULL;
 
 		rec_offs_init(foffsets_);
-
+                // 拿到free_rec对应记录在页中的偏移量
 		foffsets = rec_get_offsets(
 			free_rec, index, foffsets, ULINT_UNDEFINED, &heap);
-		if (rec_offs_size(foffsets) < rec_size) {
+
+                // 被删除的记录小于rec_size，直接进入use_heap，不会遍历下一条被删除记录，因此如果最近删除的一条记录比较小，那么这些free空间就很难被利用到，需要先插入一条小的记录，才有可能利用到链表中其他的空间
+                if (rec_offs_size(foffsets) < rec_size) {
 			if (UNIV_LIKELY_NULL(heap)) {
 				mem_heap_free(heap);
 			}
 
 			goto use_heap;
 		}
-
+                // insert_buf指向free_rec的记录最前面
 		insert_buf = free_rec - rec_offs_extra_size(foffsets);
 
 		if (page_is_comp(page)) {
+                        // 获取被删除记录的heap_no
 			heap_no = rec_get_heap_no_new(free_rec);
+
+                        // 修改PAGE_FREE和PAGE_GARBAGE
 			page_mem_alloc_free(page, NULL,
 					rec_get_next_ptr(free_rec, TRUE),
 					rec_size);
@@ -1431,6 +1436,7 @@ page_cur_insert_rec_low(
 	} else {
 use_heap:
 		free_rec = NULL;
+                // 生成新的heap_no，insert_buf执行分配的空间的最前面
 		insert_buf = page_mem_alloc_heap(page, NULL,
 						 rec_size, &heap_no);
 

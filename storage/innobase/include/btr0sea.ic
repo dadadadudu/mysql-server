@@ -73,7 +73,7 @@ btr_search_info_update(
 
 	btr_search_t*	info;
 	info = btr_search_get_info(index);
-
+        // 我理解是，只有当这个index被查询的次数比较多了，才创建或更新AHI
 	info->hash_analysis++;
 
 	if (info->hash_analysis < BTR_SEARCH_HASH_ANALYSIS) {
@@ -85,7 +85,7 @@ btr_search_info_update(
 	}
 
 	ut_ad(cursor->flag != BTR_CUR_HASH);
-
+        // 开始给当前index创建或更新AHI
 	btr_search_info_update_slow(info, cursor);
 }
 
@@ -223,9 +223,10 @@ hash_table_t*
 btr_get_search_table(const dict_index_t* index)
 {
 	ut_ad(index != NULL);
-
+        // 表空间id+索引id
 	ulint	ifold = ut_fold_ulint_pair(static_cast<ulint>(index->id),
 					   static_cast<ulint>(index->space));
-
+        // btr_search_sys->hash_tables是一个数组，根据index的表空间id和索引id生成哈希值，然后再根据分区数btr_ahi_parts进行取模
+        // 相当于btr_search_sys->hash_tables数组的大小为btr_ahi_parts，因此不同index会公用同一个hash_table_t来作为AHI
 	return(btr_search_sys->hash_tables[ifold % btr_ahi_parts]);
 }
