@@ -510,7 +510,7 @@ row_mysql_store_col_in_innobase_format(
 
 		if (!(dtype->prtype & DATA_UNSIGNED)) {
 
-			*buf ^= 128;
+			*buf ^= 128; // 1000 0000
 		}
 
 		ptr = buf;

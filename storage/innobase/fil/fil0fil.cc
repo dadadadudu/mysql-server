@@ -5036,6 +5036,7 @@ retry:
 
 	page_size_t	pageSize(space->flags);
 	const os_offset_t	page_size = pageSize.physical();
+
 	fil_node_t*	node = UT_LIST_GET_LAST(space->chain);
 
 	if (!node->being_extended) {
@@ -5073,20 +5074,22 @@ retry:
 	if the OS supports posix_fallocate() */
 
 	ut_ad(size > space->size);
-
+        // 文件的大小
 	os_offset_t	node_start = os_file_get_size(node->handle);
 	ut_a(node_start != (os_offset_t) -1);
 
 	/* Node first page number */
+        // node->size表示文件中有多少页，space->size表示表空间总共有多少页，如果一个表空间有两个文件，那么此时获取的第2个文件中的第一页的页号
 	ulint		node_first_page = space->size - node->size;
 
 	/* Number of physical pages in the node/file */
+        // 文件中有多少页
 	ulint		n_node_physical_pages
 		= static_cast<ulint>(node_start) / page_size;
 
 	/* Number of pages to extend in the node/file */
 	lint		n_node_extend;
-
+        // 需要增加多少页
 	n_node_extend = size - (node_first_page + node->size);
 
 	/* If we already have enough physical pages to satisfy the
@@ -5149,7 +5152,7 @@ retry:
 
 			read_only_mode = (space->purpose != FIL_TYPE_TEMPORARY
 					  ? false : srv_read_only_mode);
-
+                        // 写文件
 			err = fil_write_zeros(
 				node, page_size, node_start,
 				static_cast<ulint>(len), read_only_mode);

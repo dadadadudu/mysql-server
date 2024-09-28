@@ -1436,7 +1436,7 @@ page_cur_insert_rec_low(
 	} else {
 use_heap:
 		free_rec = NULL;
-                // 生成新的heap_no，insert_buf执行分配的空间的最前面
+                // 生成新的heap_no，insert_buf指向分配的空间的最前面
 		insert_buf = page_mem_alloc_heap(page, NULL,
 						 rec_size, &heap_no);
 
@@ -1446,6 +1446,7 @@ use_heap:
 	}
 
 	/* 3. Create the record */
+        // 相当于把记录插入到的对应位置
 	insert_rec = rec_copy(insert_buf, rec, offsets);
 	rec_offs_make_valid(insert_rec, index, offsets);
 

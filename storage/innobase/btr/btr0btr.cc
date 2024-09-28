@@ -1321,6 +1321,7 @@ btr_page_reorganize_low(
 
 #ifndef UNIV_HOTBACKUP
 	if (!recovery) {
+                // 把重组页的自适应哈希索引删除掉
 		btr_search_drop_page_hash_index(block);
 	}
 #endif /* !UNIV_HOTBACKUP */
