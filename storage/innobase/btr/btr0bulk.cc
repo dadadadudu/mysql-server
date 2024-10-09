@@ -875,7 +875,7 @@ BtrBulk::insert(
 		err = DB_TOO_BIG_RECORD;
 		goto func_exit;
 	}
-
+        // 当前页空间不够了，新建一页sibling_page_bulk
 	if (!page_bulk->isSpaceAvailable(rec_size)) {
 		/* Create a sibling page_bulk. */
 		PageBulk*	sibling_page_bulk;

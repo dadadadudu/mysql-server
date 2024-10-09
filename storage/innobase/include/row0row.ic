@@ -52,7 +52,7 @@ row_get_trx_id_offset(
 
 	ut_ad(dict_index_is_clust(index));
 	ut_ad(rec_offs_validate(NULL, index, offsets));
-
+        // DATA_TRX_ID是第几个字段
 	pos = dict_index_get_sys_col_pos(index, DATA_TRX_ID);
 
 	offset = rec_get_nth_field_offs(offsets, pos, &len);
@@ -83,7 +83,7 @@ row_get_rec_trx_id(
 	if (!offset) {
 		offset = row_get_trx_id_offset(index, offsets);
 	}
-
+        // 根据offset获取trx_id字段的值
 	return(trx_read_trx_id(rec + offset));
 }
 

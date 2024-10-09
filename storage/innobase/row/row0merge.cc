@@ -1736,7 +1736,7 @@ row_merge_read_clustered_index(
 			ut_a(fts_sort_idx);
 
 			fts_index = index[i];
-
+                        // 创建merge_buf
 			merge_buf[i] = row_merge_buf_create(fts_sort_idx);
 
 			add_doc_id = DICT_TF2_FLAG_IS_SET(
@@ -1848,7 +1848,7 @@ row_merge_read_clustered_index(
 	}
 
 	/* Scan the clustered index. */
-        // 扫描聚焦索引叶子节点所有数据
+        // 扫描聚集索引叶子节点所有数据
 	for (;;) {
 		const rec_t*	rec;
 		ulint*		offsets;
@@ -2072,7 +2072,7 @@ end_of_index:
 		ut_ad(!rec_offs_any_null_extern(rec, offsets));
 
 		/* Build a row based on the clustered index. */
-
+                // 把clustered index中的记录转成dtuple_t
 		row = row_build_w_add_vcol(ROW_COPY_POINTERS, clust_index,
 					   rec, offsets, new_table,
 					   add_cols, add_v, col_map, &ext,
@@ -2186,7 +2186,7 @@ write_buffers:
 				continue;
 			}
 
-                        // 把当前行对应的所有索引field添加到buf中，每个索引对应一个buf
+                        // 把当前行对应的所有索引field添加到buf中，每个索引对应一个buf，如果buf满了不会进入if
 			if (UNIV_LIKELY
 			    (row && (rows_added = row_merge_buf_add(
 					buf, fts_index, old_table, new_table,
@@ -3347,7 +3347,7 @@ row_merge_insert_index_tuples(
 		}
 
 		ut_ad(dtuple_validate(dtuple));
-
+                // 这是核心，把索引记录插入到B+树中
 		error = btr_bulk->insert(dtuple);
 
 		if (error != DB_SUCCESS) {
@@ -4178,14 +4178,14 @@ row_merge_create_index(
 	/* Create the index prototype, using the passed in def, this is not
 	a persistent operation. We pass 0 as the space id, and determine at
 	a lower level the space id where to store the table. */
-
+        // 先创建一个dict_index_t对象和
 	index = dict_mem_index_create(table->name.m_name, index_def->name,
 				      0, index_def->ind_type, n_fields);
 
 	ut_a(index);
 
 	index->set_committed(index_def->rebuild);
-
+        // n_fields表示定义了几个索引字段
 	for (i = 0; i < n_fields; i++) {
 		const char*	name;
 		index_field_t*	ifield = &index_def->fields[i];
@@ -4207,7 +4207,7 @@ row_merge_create_index(
 			name = dict_table_get_col_name(table, ifield->col_no);
 
 		}
-
+                // 设置dict_field_t的名字和前缀
 		dict_mem_index_add_field(index, name, ifield->prefix_len);
 	}
 

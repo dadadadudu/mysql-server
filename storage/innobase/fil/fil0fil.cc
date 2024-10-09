@@ -3681,7 +3681,7 @@ fil_ibd_create(
 	flags = fsp_flags_set_page_size(flags, univ_page_size);
 #endif /* !UNIV_HOTBACKUP */
 
-        // 初始化后
+        // 初始化FSP_HDR页中属性
 	fsp_header_init_fields(page, space_id, flags);
         // 写入Fil Header中的FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID
 	mach_write_to_4(page + FIL_PAGE_ARCH_LOG_NO_OR_SPACE_ID, space_id);

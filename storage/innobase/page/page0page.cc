@@ -32,6 +32,8 @@ Index page routines
 Created 2/2/1994 Heikki Tuuri
 *******************************************************/
 
+//#include <thread>
+
 #include "page0page.h"
 #ifdef UNIV_NONINL
 #include "page0page.ic"
@@ -332,7 +334,7 @@ static const byte infimum_supremum_compact[] = {
 	'i', 'n', 'f', 'i', 'm', 'u', 'm', 0,
 	/* the supremum record */
 	0x01/*n_owned=1*/,
-	0x00, 0x0b/* heap_no=1, REC_STATUS_SUPREMUM */,  // 00000000 00001011 13个bit表示heap_no， 3个bit表示记录类型
+	0x00, 0x0b/* heap_no=1, REC_STATUS_SUPREMUM */,  // 00000000 00001011 13个bit表示heap_no， 3个bit表示记录类型，0表示普通记录，1表示非叶子节点记录，2表示最小记录，3表示最大记录
 	0x00, 0x00/* end of record list */,
 	's', 'u', 'p', 'r', 'e', 'm', 'u', 'm'
 };
@@ -572,21 +574,25 @@ page_copy_rec_list_end_no_locks(
 	cur2 = page_get_infimum_rec(buf_block_get_frame(new_block));
 
 	/* Copy records from the original page to the new page */
-
+        // cur1指向的是临时页中的第一条记录
 	while (!page_cur_is_after_last(&cur1)) {
 		rec_t*	cur1_rec = page_cur_get_rec(&cur1);
 		rec_t*	ins_rec;
 		offsets = rec_get_offsets(cur1_rec, index, offsets,
 					  ULINT_UNDEFINED, &heap);
+                // 把cur1指向的记录插入到cur2的后面
 		ins_rec = page_cur_insert_rec_low(cur2, index,
 						  cur1_rec, offsets, mtr);
+// 测试
+//                std::this_thread::sleep_for(std::chrono::seconds(60));
+
 		if (UNIV_UNLIKELY(!ins_rec)) {
 			ib::fatal() << "Rec offset " << page_offset(rec)
 				<< ", cur1 offset "
 				<< page_offset(page_cur_get_rec(&cur1))
 				<< ", cur2 offset " << page_offset(cur2);
 		}
-
+                // 移动到下一条记录
 		page_cur_move_to_next(&cur1);
 		cur2 = ins_rec;
 	}

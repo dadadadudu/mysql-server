@@ -775,7 +775,7 @@ dict_create_sys_fields_tuple(
 			break;
 		}
 	}
-
+        // 获取fld_no对应的dict_field_t
 	field = dict_index_get_nth_field(index, fld_no);
 
 	sys_fields = dict_sys->sys_fields;
@@ -1023,7 +1023,7 @@ dict_create_index_tree_step(
 	}
 
 	search_tuple = dict_create_search_tuple(node->ind_row, node->heap);
-        //
+        // 获取sys_indexes表的聚集索引，并找到当前索引对应的记录，修改该记录的中的page_no字段
 	btr_pcur_open(UT_LIST_GET_FIRST(sys_indexes->indexes),
 		      search_tuple, PAGE_CUR_L, BTR_MODIFY_LEAF,
 		      &pcur, &mtr);
@@ -1606,7 +1606,7 @@ dict_create_index_step(
 	if (node->state == INDEX_BUILD_INDEX_DEF) {
 
                 /* DO THE CHECKS OF THE CONSISTENCY CONSTRAINTS HERE */
-                // 创建索引
+                // 利用dict_index_t来构建dtuple_t，用来插入到sys_indexes中
 		err = dict_build_index_def_step(thr, node);
 
 		if (err != DB_SUCCESS) {
@@ -1623,7 +1623,7 @@ dict_create_index_step(
 	}
 
 	if (node->state == INDEX_BUILD_FIELD_DEF) {
-
+                // 这里会其实会进来多次，每次进来的field_no不一样，第一次为0
 		if (node->field_no < (node->index)->n_fields) {
 
 			dict_build_field_def_step(node);

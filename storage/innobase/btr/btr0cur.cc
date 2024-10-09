@@ -3235,6 +3235,8 @@ fail_err:
 	}
 
 	if (*rec) {
+          // 测试
+//           btr_page_reorganize(page_cursor, index, mtr);
 	} else if (page_size.is_compressed()) {
 		/* Reset the IBUF_BITMAP_FREE bits, because
 		page_cur_tuple_insert() will have attempted page

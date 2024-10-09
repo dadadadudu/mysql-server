@@ -222,7 +222,7 @@ ins_node_set_new_row(
 	ins_node_create_entry_list(node);
 
 	/* Allocate from entry_sys_heap buffers for sys fields */
-
+        // 分配系统字段
 	row_ins_alloc_sys_fields(node);
 
 	/* As we allocated a new trx id buf, the trx id should be written

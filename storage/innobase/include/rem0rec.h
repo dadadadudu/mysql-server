@@ -60,6 +60,7 @@ in addition to the data and the offsets */
 #define REC_N_NEW_EXTRA_BYTES	5
 
 /* Record status values */
+// 记录类型
 #define REC_STATUS_ORDINARY	0
 #define REC_STATUS_NODE_PTR	1
 #define REC_STATUS_INFIMUM	2

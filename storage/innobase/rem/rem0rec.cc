@@ -565,6 +565,7 @@ rec_get_offsets_func(
 	ut_ad(index);
 	ut_ad(heap);
 
+        // 当前记录有几个字段
 	if (dict_table_is_comp(index->table)) {
 		switch (UNIV_EXPECT(rec_get_status(rec),
 				    REC_STATUS_ORDINARY)) {
@@ -606,11 +607,12 @@ rec_get_offsets_func(
 		}
 		offsets = static_cast<ulint*>(
 			mem_heap_alloc(*heap, size * sizeof(ulint)));
-
+                // offsets[0]用来存记录大小
 		rec_offs_set_n_alloc(offsets, size);
 	}
-
+        // offsets[1]用来存字段个数
 	rec_offs_set_n_fields(offsets, n);
+        // 其他字节用来存每个字段内容的偏移地址，如果要想要获取当前记录的某个字段的内容，则可以从offsets找到该字段的偏移量，从而找到字段值
 	rec_init_offsets(rec, index, offsets);
 	return(offsets);
 }
